@@ -1,0 +1,60 @@
+<!-- templates/index.html -->
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <title>智学推荐 · 大模型驱动的对话式学习助手</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="glass-container">
+        <!-- 头部 -->
+        <div class="chat-header">
+            <div class="header-left">
+                <div class="logo">
+                    <span>📘</span>
+                </div>
+                <div class="title-section">
+                    <h1>智学推荐 · LearnWise</h1>
+                    <div class="badge">
+                        <span>大模型驱动</span>
+                        <span>知识图谱</span>
+                        <span>个性化推荐</span>
+                    </div>
+                </div>
+            </div>
+            <div class="header-right">
+                <button class="clear-btn" onclick="clearChat()">
+                    <span>🔄</span> 新对话
+                </button>
+            </div>
+        </div>
+        
+        <!-- 对话区域 -->
+        <div class="chat-messages" id="chat-messages">
+            <!-- 消息会动态加载到这里 -->
+        </div>
+        
+        <!-- 输入区域 -->
+        <div class="chat-input">
+            <div class="input-wrapper">
+                <input type="text" id="user-input" 
+                       placeholder="输入你想学习的内容... 比如：我想学Python" 
+                       onkeypress="if(event.keyCode==13) sendMessage()"
+                       autofocus>
+            </div>
+            <button class="send-btn" onclick="sendMessage()">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M22 2L11 13M22 2L15 22L11 13M22 2L2 9L11 13" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+            </button>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+</body>
+</html>
