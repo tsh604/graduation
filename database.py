@@ -9,7 +9,7 @@ def init_database():
     
     conn = sqlite3.connect('data/learning.db')
     cursor = conn.cursor()
-    
+     
     # 创建学习资源表
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS resources (
