@@ -2,7 +2,7 @@
 from flask import Flask, render_template, request, jsonify, session
 import sqlite3
 import uuid
-from database import init_database, save_dialogue
+from database import init_database, save_dialogue, clear_user_dialogues
 from recommender import Recommender
 from path_planner import generate_learning_plan, get_learning_efficiency_tips
 import json
@@ -27,6 +27,9 @@ except Exception as e:
 # 初始化数据库
 init_database()
 
+# 应用启动时清空对话历史，确保每次启动都是一个新对话
+clear_user_dialogues()
+
 app = Flask(__name__)
 app.secret_key = 'your-secret-key-123'
 
@@ -37,6 +40,14 @@ app.config['SESSION_COOKIE_NAME'] = 'learning_session'
 app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 app.config['SESSION_REFRESH_EACH_REQUEST'] = True
+
+# 禁用静态文件缓存
+@app.after_request
+def add_header(response):
+    response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    response.headers['Pragma'] = 'no-cache'
+    response.headers['Expires'] = '0'
+    return response
 
 # 初始化各模块
 recommender = Recommender()
@@ -634,6 +645,9 @@ class DialogueManager:
         
         # 首先检查是否是感谢/拒绝类消息（所有阶段都优先处理）
         if DialogueManager._is_thanks(user_message):
+            # 重置对话状态，以便用户可以开始新的对话
+            state['stage'] = 'initial'
+            state['context'] = {}
             return "好的，如果有需要随时再来问我！祝你学习顺利！"
         
         # 检查是否请求资源库
@@ -825,6 +839,9 @@ def reset_conversation():
         del dialogue_state[user_id]
         print(f"用户 {user_id} 的对话已重置")
     
+    # 清空对话历史表
+    clear_user_dialogues()
+    
     session.pop('_flashes', None)
     
     return jsonify({'status': 'success', 'message': '对话已重置'})
@@ -927,4 +944,4 @@ def search_resource():
 
 if __name__ == '__main__':
     dialogue_state.clear()
-    app.run(debug=True, port=5000)
+    app.run(debug=True, port=8000)

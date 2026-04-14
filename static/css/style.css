@@ -251,89 +251,123 @@ body {
 
 /* 推荐资源卡片样式 */
 .resource-list {
-    margin: 12px 0 8px;
+    margin: 16px 0 12px;
 }
 
 .resource-item {
     display: flex;
-    align-items: center;
-    padding: 10px 14px;
-    background: #f8fafc;
-    border-radius: 16px;
-    margin-bottom: 8px;
+    flex-direction: column;
+    padding: 16px 20px;
+    background: linear-gradient(135deg, #f8fafc 0%, #ffffff 100%);
+    border-radius: 20px;
+    margin-bottom: 12px;
     border: 1px solid #eef2f6;
-    transition: all 0.2s;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+    transition: all 0.3s ease;
+    position: relative;
+    overflow: hidden;
+}
+
+.resource-item::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 4px;
+    height: 100%;
+    background: linear-gradient(180deg, #6366f1 0%, #8b5cf6 100%);
+    border-radius: 4px 0 0 4px;
 }
 
 .resource-item:hover {
-    background: #f1f5f9;
-    transform: translateX(4px);
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
     border-color: #cbd5e1;
 }
 
+.resource-header {
+    display: flex;
+    align-items: center;
+    margin-bottom: 8px;
+    flex-wrap: wrap;
+}
+
 .resource-index {
-    width: 28px;
-    height: 28px;
-    background: #e2e8f0;
-    border-radius: 10px;
+    width: 32px;
+    height: 32px;
+    background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+    border-radius: 12px;
     display: flex;
     align-items: center;
     justify-content: center;
     font-size: 14px;
     font-weight: 600;
-    color: #475569;
+    color: white;
     margin-right: 12px;
     flex-shrink: 0;
+    box-shadow: 0 4px 8px rgba(99, 102, 241, 0.3);
 }
 
 .resource-tag {
     background: #dbeafe;
     color: #2563eb;
-    padding: 4px 10px;
+    padding: 4px 12px;
     border-radius: 20px;
     font-size: 12px;
     font-weight: 500;
     margin-right: 10px;
     white-space: nowrap;
-}
-
-.resource-info {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
+    flex-shrink: 0;
 }
 
 .resource-title {
     font-weight: 600;
     color: #0f172a;
-    margin-bottom: 2px;
+    font-size: 15px;
+    line-height: 1.4;
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
-.resource-meta {
-    font-size: 12px;
+.resource-url {
+    font-size: 13px;
     color: #64748b;
-    display: flex;
-    gap: 12px;
+    text-decoration: none;
+    transition: all 0.2s;
+    word-break: break-all;
+    display: block;
 }
 
-.resource-difficulty {
-    padding: 2px 8px;
-    background: #f1f5f9;
-    border-radius: 20px;
-    font-size: 11px;
-    font-weight: 500;
+.resource-url:hover {
+    color: #4f46e5;
+    text-decoration: underline;
 }
 
 .resource-link {
-    color: #94a3b8;
+    color: #4f46e5;
     text-decoration: none;
-    font-size: 13px;
-    margin-left: 12px;
-    transition: color 0.2s;
+    font-size: 14px;
+    font-weight: 500;
+    margin-top: 8px;
+    display: inline-block;
+    transition: all 0.2s;
 }
 
 .resource-link:hover {
-    color: #4f46e5;
+    color: #4338ca;
+    transform: translateX(4px);
+}
+
+.resource-link::after {
+    content: ' →';
+    transition: transform 0.2s;
+}
+
+.resource-link:hover::after {
+    transform: translateX(2px);
 }
 
 /* 建议卡片 */

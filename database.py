@@ -224,17 +224,17 @@ def init_database():
         # 显示插入结果
         cursor.execute('SELECT MIN(id), MAX(id), COUNT(*) FROM resources')
         min_id, max_id, total = cursor.fetchone()
-        print(f"✅ 成功插入 {total} 条学习资源")
-        print(f"✅ 资源ID从 {min_id} 到 {max_id}")
+        print(f"成功插入 {total} 条学习资源")
+        print(f"资源ID从 {min_id} 到 {max_id}")
         
     else:
-        print(f"📚 数据库已有 {count} 条数据，跳过插入")
+        print(f"数据库已有 {count} 条数据，跳过插入")
         cursor.execute('SELECT MIN(id), MAX(id) FROM resources')
         min_id, max_id = cursor.fetchone()
-        print(f"💡 当前资源ID范围: {min_id} 到 {max_id}")
+        print(f"当前资源ID范围: {min_id} 到 {max_id}")
     
     conn.close()
-    print("✅ 数据库初始化完成！")
+    print("数据库初始化完成！")
 
 
 def get_resources_by_knowledge(knowledge_point):
@@ -300,6 +300,18 @@ def reset_database():
         print("🎉 数据库重置完成！")
     else:
         print("❌ 操作已取消")
+
+
+def clear_user_dialogues():
+    """清空对话历史表并重置自增ID"""
+    conn = sqlite3.connect('data/learning.db')
+    cursor = conn.cursor()
+    cursor.execute('DELETE FROM dialogues')
+    # 重置自增计数器，使ID从1开始
+    cursor.execute('DELETE FROM sqlite_sequence WHERE name="dialogues"')
+    conn.commit()
+    conn.close()
+    print("对话历史已清空，ID已重置")
 
 
 if __name__ == '__main__':

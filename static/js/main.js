@@ -73,15 +73,25 @@ function addMessage(content, sender) {
     
     // 如果是机器人消息，尝试美化内容
     if (sender === 'bot') {
-        // 检查是否包含学习方案
-        if (content.includes('学习方案') || content.includes('学习阶段规划')) {
-            formattedContent = formatLearningPlan(content);
-        } else if (content.includes('## ')) {
-            // 处理包含Markdown标题的内容（如术语解释）
-            formattedContent = formatMarkdownContent(content);
-        } else {
-            formattedContent = content.replace(/\n/g, '<br>');
-        }
+        // 直接移除所有#符号，确保它们不会显示在页面上
+        formattedContent = content.replace(/#+/g, '');
+        
+        // 处理资源项，转换为美观的卡片形式
+        formattedContent = formattedContent.replace(/(\d+)\.\s*\[(.*?)\]\s*(.*?)\s*-\s*(https?:\/\/[^\s]+)/g, function(match, index, type, title, url) {
+            return `
+                <div class="resource-item">
+                    <div class="resource-header">
+                        <span class="resource-index">${index}</span>
+                        <span class="resource-tag">${type}</span>
+                        <span class="resource-title">${title.trim()}</span>
+                    </div>
+                    <a href="${url}" target="_blank" class="resource-url">${url}</a>
+                </div>
+            `;
+        });
+        
+        // 处理换行
+        formattedContent = formattedContent.replace(/\n/g, '<br>');
     } else {
         formattedContent = content.replace(/\n/g, '<br>');
     }
@@ -100,6 +110,12 @@ function addMessage(content, sender) {
     
     messagesDiv.appendChild(messageDiv);
     messagesDiv.scrollTop = messagesDiv.scrollHeight;
+}
+
+// 格式化链接为可点击状态
+function formatLinks(text) {
+    // 匹配URL并替换为可点击的链接
+    return text.replace(/(https?:\/\/[^\s]+)/g, '<a href="$1" target="_blank" class="resource-link">$1</a>');
 }
 
 // 格式化Markdown内容（用于术语解释等）
@@ -138,155 +154,16 @@ function formatMarkdownContent(content) {
 
 // 格式化学习方案
 function formatLearningPlan(content) {
-    // 按行分割
-    let lines = content.split('\n');
-    let formatted = [];
-    let inResourceList = false;
-    let currentStage = null;
+    // 简单的字符串替换方法，确保所有#符号都被移除
+    let formatted = content
+        // 移除所有Markdown标题中的#符号
+        .replace(/#+/g, '')
+        // 处理资源链接
+        .replace(/(https?:\/\/[^\s]+)/g, '<a href="$1" target="_blank" class="resource-link">$1</a>')
+        // 处理换行
+        .replace(/\n/g, '<br>');
     
-    for (let line of lines) {
-        // 跳过空行
-        if (!line.trim()) continue;
-        
-        // 处理Markdown标题
-        if (line.startsWith('## ')) {
-            // 结束当前资源列表
-            if (inResourceList) {
-                formatted.push('</div>');
-                inResourceList = false;
-            }
-            
-            // 添加二级标题
-            let title = line.replace('## ', '').trim();
-            formatted.push(`<h3 class="plan-section">${title}</h3>`);
-        } else if (line.startsWith('### ')) {
-            // 结束当前资源列表
-            if (inResourceList) {
-                formatted.push('</div>');
-                inResourceList = false;
-            }
-            
-            // 添加三级标题（阶段）
-            let title = line.replace('### ', '').trim();
-            currentStage = title;
-            formatted.push(`<h4 class="plan-stage">${title}</h4>`);
-        } else if (line.startsWith('- ')) {
-            // 处理列表项
-            let item = line.replace('- ', '').trim();
-            
-            // 检测是否是资源列表开始
-            if (item.includes('推荐资源：')) {
-                formatted.push('<div class="resource-list">');
-                inResourceList = true;
-            } else if (inResourceList && /^\d+\./.test(item)) {
-                // 处理资源项
-                const numberMatch = item.match(/^(\d+)\./);
-                const typeMatch = item.match(/\[(.*?)\]/);
-                
-                if (numberMatch && typeMatch) {
-                    const index = numberMatch[1];
-                    const type = typeMatch[1];
-                    
-                    // 提取标题和URL
-                    let title = '';
-                    let url = '#';
-                    
-                    // 去掉开头的 "1. [视频] " 部分
-                    let restItem = item.replace(/^\d+\.\s*\[.*?\]/, '').trim();
-                    
-                    // 检查是否包含URL
-                    const urlMatch = restItem.match(/(https?:\/\/[^\s]+)/);
-                    if (urlMatch) {
-                        url = urlMatch[1];
-                        title = restItem.replace(url, '').trim();
-                    } else {
-                        title = restItem;
-                    }
-                    
-                    // 清理标题中多余的符号
-                    title = title.replace(/^-\s*/, '').trim();
-                    
-                    formatted.push(`
-                        <div class="resource-item">
-                            <span class="resource-index">${index}</span>
-                            <span class="resource-tag">${type}</span>
-                            <div class="resource-info">
-                                <span class="resource-title">${title || '学习资源'}</span>
-                            </div>
-                            <a href="${url}" target="_blank" class="resource-link" ${url === '#' ? 'style="pointer-events: none; opacity: 0.5;"' : ''}>查看 →</a>
-                        </div>
-                    `);
-                } else {
-                    // 如果解析失败，直接显示原行
-                    formatted.push(`<div class="resource-item">${item}</div>`);
-                }
-            } else {
-                // 普通列表项
-                formatted.push(`<div class="plan-item">${item}</div>`);
-            }
-        } else if (inResourceList && /^\s*\d+\./.test(line)) {
-            // 处理资源项（前面有空格的情况）
-            let item = line.trim();
-            const numberMatch = item.match(/^(\d+)\./);
-            const typeMatch = item.match(/\[(.*?)\]/);
-            
-            if (numberMatch && typeMatch) {
-                const index = numberMatch[1];
-                const type = typeMatch[1];
-                
-                // 提取标题和URL
-                let title = '';
-                let url = '#';
-                
-                // 去掉开头的 "1. [视频] " 部分
-                let restItem = item.replace(/^\d+\.\s*\[.*?\]/, '').trim();
-                
-                // 检查是否包含URL
-                const urlMatch = restItem.match(/(https?:\/\/[^\s]+)/);
-                if (urlMatch) {
-                    url = urlMatch[1];
-                    title = restItem.replace(url, '').trim();
-                } else {
-                    title = restItem;
-                }
-                
-                // 清理标题中多余的符号
-                title = title.replace(/^-\s*/, '').trim();
-                
-                formatted.push(`
-                    <div class="resource-item">
-                        <span class="resource-index">${index}</span>
-                        <span class="resource-tag">${type}</span>
-                        <div class="resource-info">
-                            <span class="resource-title">${title || '学习资源'}</span>
-                        </div>
-                        <a href="${url}" target="_blank" class="resource-link" ${url === '#' ? 'style="pointer-events: none; opacity: 0.5;"' : ''}>查看 →</a>
-                    </div>
-                `);
-            } else {
-                // 如果解析失败，直接显示原行
-                formatted.push(`<div class="resource-item">${item}</div>`);
-            }
-        } else if (line.includes('🎯') || line.includes('📊') || line.includes('🎨') || line.includes('⏱️') || line.includes('📅') || line.includes('📚')) {
-            // 处理带有图标的信息行
-            formatted.push(`<div class="plan-info">${line}</div>`);
-        } else {
-            // 结束当前资源列表
-            if (inResourceList) {
-                formatted.push('</div>');
-                inResourceList = false;
-            }
-            
-            // 普通文本
-            formatted.push(`<div class="plan-text">${line}</div>`);
-        }
-    }
-    
-    if (inResourceList) {
-        formatted.push('</div>');
-    }
-    
-    return formatted.join('');
+    return formatted;
 }
 
 // 格式化推荐资源
@@ -613,9 +490,14 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // 添加浏览资源库按钮
     const headerRight = document.querySelector('.header-right');
-    const libraryButton = document.createElement('button');
-    libraryButton.className = 'library-button';
-    libraryButton.textContent = '浏览资源库';
-    libraryButton.onclick = showResourceLibrary;
-    headerRight.insertBefore(libraryButton, headerRight.firstChild);
+    if (headerRight) {
+        const libraryButton = document.createElement('button');
+        libraryButton.className = 'library-button';
+        libraryButton.textContent = '浏览资源库';
+        libraryButton.onclick = showResourceLibrary;
+        headerRight.insertBefore(libraryButton, headerRight.firstChild);
+    }
+    
+    // 强制刷新缓存
+    console.log('Main.js loaded and executed');
 });

@@ -25,7 +25,7 @@ class ZhipuLLMService:
             # 初始化智谱AI客户端
             self.client = ZhipuAI(api_key=self.api_key)
             self.use_simple = False
-            print("✅ 智谱AI服务初始化成功")
+            print("智谱AI服务初始化成功")
     
     def _clean_markdown(self, text):
         """清理Markdown标记，让显示更友好"""
