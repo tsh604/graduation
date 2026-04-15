@@ -97,7 +97,8 @@ class Recommender:
             "docker": "Docker",
             "git": "Git",
             "android": "Android",
-            "ios": "iOS"
+            "ios": "iOS",
+            "运维": "运维"
         }
         
         text_lower = text.lower()

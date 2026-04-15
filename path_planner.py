@@ -10,7 +10,7 @@ class PathPlanner:
         self.db_path = db_path
         self.kg = knowledge_graph
     
-    def _get_resources_by_topic(self, topic, level=None, limit=3, original_topic=None, used_resource_ids=None):
+    def _get_resources_by_topic(self, topic, level=None, limit=3, original_topic=None, used_resource_ids=None, goal=None):
         """根据主题和难度获取资源
         
         Args:
@@ -19,6 +19,7 @@ class PathPlanner:
             limit: 返回资源数量限制
             original_topic: 原始目标主题（用于获取相关的基础资源）
             used_resource_ids: 已使用的资源ID集合，用于避免重复推荐
+            goal: 学习目标
         """
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
@@ -26,55 +27,635 @@ class PathPlanner:
         resources = []
         used_ids = used_resource_ids or set()
         
-        # 1. 首先尝试精确匹配
+        # 1. 首先尝试精确匹配，根据学习目标调整查询
         if level:
-            cursor.execute('''
-                SELECT * FROM resources 
-                WHERE (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?) 
-                AND difficulty = ?
-                LIMIT ?
-            ''', ('%' + topic + '%', '%' + topic + '%', '%' + topic + '%', level, limit * 3))  # 获取更多资源以便过滤
+            # 对于Python主题，优先获取Python相关资源
+            if 'Python' in topic:
+                # 首先尝试获取Python基础教程
+                cursor.execute('''
+                    SELECT * FROM resources 
+                    WHERE title LIKE ? 
+                    AND difficulty = ?
+                ''', ('%Python基础教程%', level))
+                basic_tutorial = cursor.fetchall()
+                
+                # 然后根据学习目标获取其他Python相关资源
+                if goal == '找工作':
+                    # 找工作目标：优先包含"面试"、"就业"、"项目"等关键词的资源
+                    cursor.execute('''
+                        SELECT * FROM resources 
+                        WHERE (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?) 
+                        AND difficulty = ?
+                        AND title NOT LIKE ?
+                        AND (title LIKE ? OR description LIKE ? OR knowledge_point LIKE ?)
+                        LIMIT ?
+                    ''', ('%Python%', '%Python%', '%Python%', level, '%Python基础教程%', '%面试%', '%就业%', '%项目%', limit * 10))
+                elif goal == '兴趣学习':
+                    # 兴趣学习目标：优先包含"趣味"、"入门"、"实践"等关键词的资源
+                    cursor.execute('''
+                        SELECT * FROM resources 
+                        WHERE (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?) 
+                        AND difficulty = ?
+                        AND title NOT LIKE ?
+                        AND (title LIKE ? OR description LIKE ? OR knowledge_point LIKE ?)
+                        LIMIT ?
+                    ''', ('%Python%', '%Python%', '%Python%', level, '%Python基础教程%', '%趣味%', '%入门%', '%实践%', limit * 10))
+                elif goal == '项目开发':
+                    # 项目开发目标：优先包含"项目"、"实战"、"开发"等关键词的资源
+                    cursor.execute('''
+                        SELECT * FROM resources 
+                        WHERE (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?) 
+                        AND difficulty = ?
+                        AND title NOT LIKE ?
+                        AND (title LIKE ? OR description LIKE ? OR knowledge_point LIKE ?)
+                        LIMIT ?
+                    ''', ('%Python%', '%Python%', '%Python%', level, '%Python基础教程%', '%项目%', '%实战%', '%开发%', limit * 10))
+                else:
+                    # 其他目标：使用基本查询
+                    cursor.execute('''
+                        SELECT * FROM resources 
+                        WHERE (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?) 
+                        AND difficulty = ?
+                        AND title NOT LIKE ?
+                        LIMIT ?
+                    ''', ('%Python%', '%Python%', '%Python%', level, '%Python基础教程%', limit * 10))
+                other_resources = cursor.fetchall()
+                
+                # 合并资源
+                resources = []
+                if basic_tutorial:
+                    resources.extend(basic_tutorial)
+                if other_resources:
+                    resources.extend(other_resources)
+                
+                # 根据学习目标添加特定的Python资源
+                if goal == '找工作':
+                    # 找工作目标：优先添加LeetCode等面试相关资源
+                    # 1. LeetCode Python题库
+                    cursor.execute('''
+                        SELECT * FROM resources 
+                        WHERE title LIKE ? AND difficulty = ?
+                    ''', ('%LeetCode%', level))
+                    leetcode = cursor.fetchone()
+                    if leetcode and leetcode not in resources:
+                        resources.append(leetcode)
+                        if len(resources) >= limit:
+                            pass
+                    
+                    # 2. 廖雪峰Python教程
+                    cursor.execute('''
+                        SELECT * FROM resources 
+                        WHERE title LIKE ? AND difficulty = ?
+                    ''', ('%廖雪峰%', level))
+                    liaoxuefeng = cursor.fetchone()
+                    if liaoxuefeng and liaoxuefeng not in resources:
+                        resources.append(liaoxuefeng)
+                        if len(resources) >= limit:
+                            pass
+                elif goal == '兴趣学习':
+                    # 兴趣学习目标：优先添加趣味性强的Python资源
+                    # 1. Python 100天教程
+                    cursor.execute('''
+                        SELECT * FROM resources 
+                        WHERE title LIKE ? AND difficulty = ?
+                    ''', ('%100天%', level))
+                    python100 = cursor.fetchone()
+                    if python100 and python100 not in resources:
+                        resources.append(python100)
+                        if len(resources) >= limit:
+                            pass
+                    
+                    # 2. 廖雪峰Python教程
+                    cursor.execute('''
+                        SELECT * FROM resources 
+                        WHERE title LIKE ? AND difficulty = ?
+                    ''', ('%廖雪峰%', level))
+                    liaoxuefeng = cursor.fetchone()
+                    if liaoxuefeng and liaoxuefeng not in resources:
+                        resources.append(liaoxuefeng)
+                        if len(resources) >= limit:
+                            pass
+                elif goal == '项目开发':
+                    # 项目开发目标：优先添加与项目开发相关的Python资源
+                    # 1. Jupyter教程
+                    cursor.execute('''
+                        SELECT * FROM resources 
+                        WHERE title LIKE ? AND difficulty = ?
+                    ''', ('%Jupyter%', level))
+                    jupyter = cursor.fetchone()
+                    if jupyter and jupyter not in resources:
+                        resources.append(jupyter)
+                        if len(resources) >= limit:
+                            pass
+                    
+                    # 2. PyCharm指南
+                    cursor.execute('''
+                        SELECT * FROM resources 
+                        WHERE title LIKE ? AND difficulty = ?
+                    ''', ('%PyCharm%', level))
+                    pycharm = cursor.fetchone()
+                    if pycharm and pycharm not in resources:
+                        resources.append(pycharm)
+                        if len(resources) >= limit:
+                            pass
+                
+                # 如果没有找到足够的资源，尝试获取所有Python资源（不限制难度）
+                if not resources or len(resources) < limit:
+                    # 首先尝试根据学习目标获取资源
+                    if goal == '找工作':
+                        # 找工作目标：优先包含"面试"、"就业"、"项目"等关键词的资源
+                        cursor.execute('''
+                            SELECT * FROM resources 
+                            WHERE (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?)
+                            AND title NOT LIKE ?
+                            AND (title LIKE ? OR description LIKE ? OR knowledge_point LIKE ?)
+                            LIMIT ?
+                        ''', ('%Python%', '%Python%', '%Python%', '%Python基础教程%', '%面试%', '%就业%', '%项目%', limit * 10))
+                    elif goal == '兴趣学习':
+                        # 兴趣学习目标：优先包含"趣味"、"入门"、"实践"等关键词的资源
+                        cursor.execute('''
+                            SELECT * FROM resources 
+                            WHERE (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?)
+                            AND title NOT LIKE ?
+                            AND (title LIKE ? OR description LIKE ? OR knowledge_point LIKE ?)
+                            LIMIT ?
+                        ''', ('%Python%', '%Python%', '%Python%', '%Python基础教程%', '%趣味%', '%入门%', '%实践%', limit * 10))
+                    elif goal == '项目开发':
+                        # 项目开发目标：优先包含"项目"、"实战"、"开发"等关键词的资源
+                        cursor.execute('''
+                            SELECT * FROM resources 
+                            WHERE (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?)
+                            AND title NOT LIKE ?
+                            AND (title LIKE ? OR description LIKE ? OR knowledge_point LIKE ?)
+                            LIMIT ?
+                        ''', ('%Python%', '%Python%', '%Python%', '%Python基础教程%', '%项目%', '%实战%', '%开发%', limit * 10))
+                    else:
+                        # 其他目标：使用基本查询
+                        cursor.execute('''
+                            SELECT * FROM resources 
+                            WHERE (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?)
+                            AND title NOT LIKE ?
+                            LIMIT ?
+                        ''', ('%Python%', '%Python%', '%Python%', '%Python基础教程%', limit * 10))
+                    more_resources = cursor.fetchall()
+                    if more_resources:
+                        resources.extend(more_resources)
+                
+                # 如果还是没有足够的资源，获取所有Python资源
+                if not resources or len(resources) < limit:
+                    cursor.execute('''
+                        SELECT * FROM resources 
+                        WHERE (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?)
+                        AND title NOT LIKE ?
+                        LIMIT ?
+                    ''', ('%Python%', '%Python%', '%Python%', '%Python基础教程%', limit * 10))
+                    fallback_resources = cursor.fetchall()
+                    if fallback_resources:
+                        resources.extend(fallback_resources)
+            else:
+                # 基础SQL查询
+                base_query = '''
+                    SELECT * FROM resources 
+                    WHERE (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?) 
+                    AND difficulty = ?
+                '''
+                
+                # 提取主题名称（去除难度级别部分）
+                topic_name = topic.split(' ')[0].split('(')[0]
+                
+                # 根据学习目标添加额外条件
+                if goal == '找工作':
+                    # 找工作目标：优先包含"面试"、"就业"、"项目"等关键词的资源
+                    base_query += " AND (title LIKE ? OR description LIKE ? OR knowledge_point LIKE ?)"
+                    cursor.execute(base_query + " LIMIT ?", 
+                                  ('%' + topic_name + '%', '%' + topic_name + '%', '%' + topic_name + '%', 
+                                   level, '%面试%', '%就业%', '%项目%', limit * 3))
+                elif goal == '兴趣学习':
+                    # 兴趣学习目标：优先包含"趣味"、"入门"、"实践"等关键词的资源
+                    base_query += " AND (title LIKE ? OR description LIKE ? OR knowledge_point LIKE ?)"
+                    cursor.execute(base_query + " LIMIT ?", 
+                                  ('%' + topic_name + '%', '%' + topic_name + '%', '%' + topic_name + '%', 
+                                   level, '%趣味%', '%入门%', '%实践%', limit * 3))
+                elif goal == '项目开发':
+                    # 项目开发目标：优先包含"项目"、"实战"、"开发"等关键词的资源
+                    base_query += " AND (title LIKE ? OR description LIKE ? OR knowledge_point LIKE ?)"
+                    cursor.execute(base_query + " LIMIT ?", 
+                                  ('%' + topic_name + '%', '%' + topic_name + '%', '%' + topic_name + '%', 
+                                   level, '%项目%', '%实战%', '%开发%', limit * 3))
+                else:
+                    # 其他目标：使用基本查询
+                    cursor.execute(base_query + " LIMIT ?", 
+                                  ('%' + topic_name + '%', '%' + topic_name + '%', '%' + topic_name + '%', 
+                                   level, limit * 3))
+                resources = cursor.fetchall()
         else:
+            # 没有指定难度级别时的查询
             cursor.execute('''
                 SELECT * FROM resources 
                 WHERE knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?
                 LIMIT ?
             ''', ('%' + topic + '%', '%' + topic + '%', '%' + topic + '%', limit * 3))  # 获取更多资源以便过滤
-        
-        resources = cursor.fetchall()
+            resources = cursor.fetchall()
         
         # 2. 如果没有找到资源，尝试获取通用资源
         if not resources:
-            # 对于编程基础，获取与原始主题相关的编程入门资源
-            if '编程基础' in topic and original_topic:
-                # 尝试获取与原始主题相关的基础资源
-                cursor.execute('''
-                    SELECT * FROM resources 
-                    WHERE (knowledge_point LIKE ? OR knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?)
-                    LIMIT ?
-                ''', ('%' + original_topic + '%', '%编程%', '%' + original_topic + '%', '%' + original_topic + '%', limit * 5))
+            # 对于编程基础，首先尝试获取通用编程基础资源（不包含Python特定资源）
+            if '编程基础' in topic:
+                # 定义编程相关的关键词
+                programming_keywords = ['编程', '代码', '算法', '数据结构', '计算机', '技术', '前端', '后端', '开发', '软件', '程序', '语言', '语法', '逻辑', '调试', '版本控制', 'Git', 'Linux', '命令行', '终端', '编辑器', 'IDE', '环境', '配置', '变量', '函数', '循环', '条件', '数据类型', '运算符', '表达式', '语句', '结构', '设计', '模式', '面向对象', '过程', '函数式', '编程范式']
+                
+                # 先尝试获取通用编程基础资源，排除Python特定资源和数学资源
+                if goal == '找工作':
+                    # 找工作目标：优先包含"面试"、"就业"、"项目"等关键词的资源
+                    cursor.execute('''
+                        SELECT * FROM resources 
+                        WHERE difficulty = ? 
+                        AND (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?)
+                        AND NOT (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?)
+                        AND NOT (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?)
+                        AND (title LIKE ? OR description LIKE ? OR knowledge_point LIKE ?)
+                        LIMIT ?
+                    ''', (level or '初级', '%编程%', '%基础%', '%编程%', '%Python%', '%Python%', '%Python%', '%数学%', '%数学%', '%数学%', '%面试%', '%就业%', '%项目%', limit * 5))
+                elif goal == '兴趣学习':
+                    # 兴趣学习目标：优先包含"趣味"、"入门"、"实践"等关键词的资源
+                    cursor.execute('''
+                        SELECT * FROM resources 
+                        WHERE difficulty = ? 
+                        AND (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?)
+                        AND NOT (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?)
+                        AND NOT (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?)
+                        AND (title LIKE ? OR description LIKE ? OR knowledge_point LIKE ?)
+                        LIMIT ?
+                    ''', (level or '初级', '%编程%', '%基础%', '%编程%', '%Python%', '%Python%', '%Python%', '%数学%', '%数学%', '%数学%', '%趣味%', '%入门%', '%实践%', limit * 5))
+                elif goal == '项目开发':
+                    # 项目开发目标：优先包含"项目"、"实战"、"开发"等关键词的资源
+                    cursor.execute('''
+                        SELECT * FROM resources 
+                        WHERE difficulty = ? 
+                        AND (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?)
+                        AND NOT (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?)
+                        AND NOT (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?)
+                        AND (title LIKE ? OR description LIKE ? OR knowledge_point LIKE ?)
+                        LIMIT ?
+                    ''', (level or '初级', '%编程%', '%基础%', '%编程%', '%Python%', '%Python%', '%Python%', '%数学%', '%数学%', '%数学%', '%项目%', '%实战%', '%开发%', limit * 5))
+                else:
+                    # 其他目标：使用基本查询
+                    cursor.execute('''
+                        SELECT * FROM resources 
+                        WHERE difficulty = ? 
+                        AND (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?)
+                        AND NOT (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?)
+                        AND NOT (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?)
+                        LIMIT ?
+                    ''', (level or '初级', '%编程%', '%基础%', '%编程%', '%Python%', '%Python%', '%Python%', '%数学%', '%数学%', '%数学%', limit * 5))
                 resources = cursor.fetchall()
                 
-                # 如果还是没有，获取通用编程基础资源
+                # 如果还是没有，再尝试获取通用编程资源
                 if not resources:
                     cursor.execute('''
                         SELECT * FROM resources 
-                        WHERE (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?)
+                        WHERE difficulty = ? 
+                        AND (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?)
+                        AND NOT (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?)
+                        AND NOT (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?)
                         LIMIT ?
-                    ''', ('%编程%', '%基础%', '%编程%', limit * 5))
+                    ''', (level or '初级', '%编程%', '%代码%', '%编程%', '%Python%', '%Python%', '%Python%', '%数学%', '%数学%', '%数学%', limit * 5))
                     resources = cursor.fetchall()
                 
-                # 如果还是没有，获取任何编程相关的资源
+                # 如果还是没有，尝试获取与编程相关的其他资源
+                if not resources:
+                    # 获取前端相关资源
+                    cursor.execute('''
+                        SELECT * FROM resources 
+                        WHERE difficulty = ? 
+                        AND (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?)
+                        AND NOT (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?)
+                        AND NOT (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?)
+                        LIMIT ?
+                    ''', (level or '初级', '%前端%', '%HTML%', '%CSS%', '%Python%', '%Python%', '%Python%', '%数学%', '%数学%', '%数学%', limit * 5))
+                    resources = cursor.fetchall()
+                
+                # 如果还是没有，尝试获取Linux相关资源
                 if not resources:
                     cursor.execute('''
                         SELECT * FROM resources 
+                        WHERE difficulty = ? 
+                        AND (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?)
+                        AND NOT (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?)
+                        AND NOT (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?)
                         LIMIT ?
-                    ''', (limit * 5,))
+                    ''', (level or '初级', '%Linux%', '%命令%', '%Linux%', '%Python%', '%Python%', '%Python%', '%数学%', '%数学%', '%数学%', limit * 5))
                     resources = cursor.fetchall()
-            
-            # 对于数学相关主题，获取数学基础资源
-            elif '数学' in topic or '代数' in topic or '微积分' in topic:
-                cursor.execute('''
+                
+                # 如果还是没有，尝试获取Git相关资源
+                if not resources:
+                    cursor.execute('''
+                        SELECT * FROM resources 
+                        WHERE difficulty = ? 
+                        AND (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?)
+                        AND NOT (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?)
+                        AND NOT (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?)
+                        LIMIT ?
+                    ''', (level or '初级', '%Git%', '%版本%', '%Git%', '%Python%', '%Python%', '%Python%', '%数学%', '%数学%', '%数学%', limit * 5))
+                    resources = cursor.fetchall()
+                
+                # 如果还是没有，尝试获取算法相关资源
+                if not resources:
+                    cursor.execute('''
+                        SELECT * FROM resources 
+                        WHERE difficulty = ? 
+                        AND (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?)
+                        AND NOT (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?)
+                        AND NOT (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?)
+                        LIMIT ?
+                    ''', (level or '初级', '%算法%', '%数据结构%', '%算法%', '%Python%', '%Python%', '%Python%', '%数学%', '%数学%', '%数学%', limit * 5))
+                    resources = cursor.fetchall()
+                
+                # 如果还是没有，尝试获取数据库相关资源
+                if not resources:
+                    cursor.execute('''
+                        SELECT * FROM resources 
+                        WHERE difficulty = ? 
+                        AND (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?)
+                        AND NOT (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?)
+                        AND NOT (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?)
+                        LIMIT ?
+                    ''', (level or '初级', '%数据库%', '%SQL%', '%数据库%', '%Python%', '%Python%', '%Python%', '%数学%', '%数学%', '%数学%', limit * 5))
+                    resources = cursor.fetchall()
+                
+                # 如果还是没有，尝试获取编程相关的其他资源
+                if not resources:
+                    cursor.execute('''
+                        SELECT * FROM resources 
+                        WHERE difficulty = ? 
+                        AND (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?)
+                        AND NOT (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?)
+                        AND NOT (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?)
+                        LIMIT ?
+                    ''', (level or '初级', '%编程%', '%程序%', '%编程%', '%Python%', '%Python%', '%Python%', '%数学%', '%数学%', '%数学%', limit * 5))
+                    resources = cursor.fetchall()
+                
+                # 如果还是没有，尝试获取技术相关资源
+                if not resources:
+                    cursor.execute('''
+                        SELECT * FROM resources 
+                        WHERE difficulty = ? 
+                        AND (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?)
+                        AND NOT (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?)
+                        AND NOT (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?)
+                        LIMIT ?
+                    ''', (level or '初级', '%技术%', '%计算机%', '%技术%', '%Python%', '%Python%', '%Python%', '%数学%', '%数学%', '%数学%', limit * 5))
+                    resources = cursor.fetchall()
+                
+                # 确保至少有一些资源
+                if not resources:
+                    # 尝试获取前端相关资源
+                    cursor.execute('''
+                        SELECT * FROM resources 
+                        WHERE difficulty = ? 
+                        AND (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?)
+                        AND NOT (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?)
+                        AND NOT (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?)
+                        LIMIT ?
+                    ''', (level or '初级', '%前端%', '%HTML%', '%CSS%', '%Python%', '%Python%', '%Python%', '%数学%', '%数学%', '%数学%', limit * 5))
+                    resources = cursor.fetchall()
+                
+                # 如果还是没有，尝试获取Git相关资源
+                if not resources:
+                    cursor.execute('''
+                        SELECT * FROM resources 
+                        WHERE difficulty = ? 
+                        AND (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?)
+                        AND NOT (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?)
+                        AND NOT (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?)
+                        LIMIT ?
+                    ''', (level or '初级', '%Git%', '%版本%', '%Git%', '%Python%', '%Python%', '%Python%', '%数学%', '%数学%', '%数学%', limit * 5))
+                    resources = cursor.fetchall()
+                
+                # 如果还是没有，尝试获取数据库相关资源
+                if not resources:
+                    cursor.execute('''
+                        SELECT * FROM resources 
+                        WHERE difficulty = ? 
+                        AND (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?)
+                        AND NOT (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?)
+                        AND NOT (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?)
+                        LIMIT ?
+                    ''', (level or '初级', '%数据库%', '%SQL%', '%数据库%', '%Python%', '%Python%', '%Python%', '%数学%', '%数学%', '%数学%', limit * 5))
+                    resources = cursor.fetchall()
+                
+                # 强制添加一些编程相关的资源，确保至少有3个资源
+                # 根据学习目标选择不同的资源
+                if goal == '找工作':
+                    # 找工作目标：优先推荐GitHub、LeetCode等与就业相关的资源
+                    # 1. GitHub指南
+                    cursor.execute('''
+                        SELECT * FROM resources 
+                        WHERE title LIKE ? AND difficulty = ?
+                    ''', ('%GitHub%', level or '初级'))
+                    github_guide = cursor.fetchone()
+                    if github_guide and github_guide not in resources:
+                        resources.append(github_guide)
+                        if len(resources) >= limit:
+                            pass
+                    
+                    # 2. Git教程
+                    cursor.execute('''
+                        SELECT * FROM resources 
+                        WHERE title LIKE ? AND difficulty = ?
+                    ''', ('%Git%', level or '初级'))
+                    git_tutorial = cursor.fetchone()
+                    if git_tutorial and git_tutorial not in resources:
+                        resources.append(git_tutorial)
+                        if len(resources) >= limit:
+                            pass
+                    
+                    # 3. Linux教程
+                    cursor.execute('''
+                        SELECT * FROM resources 
+                        WHERE title LIKE ? AND difficulty = ?
+                    ''', ('%Linux%', level or '初级'))
+                    linux_tutorial = cursor.fetchone()
+                    if linux_tutorial and linux_tutorial not in resources:
+                        resources.append(linux_tutorial)
+                        if len(resources) >= limit:
+                            pass
+                elif goal == '兴趣学习':
+                    # 兴趣学习目标：优先推荐HTML、CSS等趣味性强的资源
+                    # 1. HTML5教程
+                    cursor.execute('''
+                        SELECT * FROM resources 
+                        WHERE title LIKE ? AND difficulty = ?
+                    ''', ('%HTML5%', level or '初级'))
+                    html_tutorial = cursor.fetchone()
+                    if html_tutorial and html_tutorial not in resources:
+                        resources.append(html_tutorial)
+                        if len(resources) >= limit:
+                            pass
+                    
+                    # 2. CSS教程
+                    cursor.execute('''
+                        SELECT * FROM resources 
+                        WHERE title LIKE ? AND difficulty = ?
+                    ''', ('%CSS%', level or '初级'))
+                    css_tutorial = cursor.fetchone()
+                    if css_tutorial and css_tutorial not in resources:
+                        resources.append(css_tutorial)
+                        if len(resources) >= limit:
+                            pass
+                    
+                    # 3. MDN Web文档
+                    cursor.execute('''
+                        SELECT * FROM resources 
+                        WHERE title LIKE ? AND difficulty = ?
+                    ''', ('%MDN%', level or '初级'))
+                    mdn_tutorial = cursor.fetchone()
+                    if mdn_tutorial and mdn_tutorial not in resources:
+                        resources.append(mdn_tutorial)
+                        if len(resources) >= limit:
+                            pass
+                elif goal == '项目开发':
+                    # 项目开发目标：优先推荐Git、npm等与项目开发相关的资源
+                    # 1. Git教程
+                    cursor.execute('''
+                        SELECT * FROM resources 
+                        WHERE title LIKE ? AND difficulty = ?
+                    ''', ('%Git%', level or '初级'))
+                    git_tutorial = cursor.fetchone()
+                    if git_tutorial and git_tutorial not in resources:
+                        resources.append(git_tutorial)
+                        if len(resources) >= limit:
+                            pass
+                    
+                    # 2. npm文档
+                    cursor.execute('''
+                        SELECT * FROM resources 
+                        WHERE title LIKE ? AND difficulty = ?
+                    ''', ('%npm%', level or '初级'))
+                    npm_tutorial = cursor.fetchone()
+                    if npm_tutorial and npm_tutorial not in resources:
+                        resources.append(npm_tutorial)
+                        if len(resources) >= limit:
+                            pass
+                    
+                    # 3. VS Code文档
+                    cursor.execute('''
+                        SELECT * FROM resources 
+                        WHERE title LIKE ? AND difficulty = ?
+                    ''', ('%VS Code%', level or '初级'))
+                    vscode_tutorial = cursor.fetchone()
+                    if vscode_tutorial and vscode_tutorial not in resources:
+                        resources.append(vscode_tutorial)
+                        if len(resources) >= limit:
+                            pass
+                
+                # 如果还是没有足够的资源，获取所有编程相关资源
+                if len(resources) < limit:
+                    cursor.execute('''
+                        SELECT * FROM resources 
+                        WHERE difficulty = ? 
+                        AND (knowledge_point LIKE ? OR knowledge_point LIKE ? OR knowledge_point LIKE ? OR knowledge_point LIKE ?)
+                        AND NOT (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?)
+                        AND NOT (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?)
+                    ''', (level or '初级', '%前端%', '%Git%', '%Linux%', '%编程%', '%Python%', '%Python%', '%Python%', '%数学%', '%数学%', '%数学%'))
+                    all_programming_resources = cursor.fetchall()
+                    
+                    for res in all_programming_resources:
+                        if res not in resources:
+                            resources.append(res)
+                            if len(resources) >= limit:
+                                break
+            else:
+                # 对于其他主题（如Java、C++等），尝试获取相关资源
+                # 提取主题名称（去除难度级别部分）
+                topic_name = topic.split(' ')[0].split('(')[0]
+                
+                # 尝试获取与主题相关的资源
+                # 对于Java，直接查询knowledge_point为Java的资源
+                if topic_name == 'Java':
+                    # 尝试获取所有Java相关资源（不限制难度）
+                    cursor.execute('''
+                        SELECT * FROM resources 
+                        WHERE knowledge_point = ?
+                        LIMIT ?
+                    ''', (topic_name, limit * 10))
+                    resources = cursor.fetchall()
+                    
+                    # 如果还是没有，尝试获取所有包含Java的资源
+                    if not resources:
+                        cursor.execute('''
+                            SELECT * FROM resources 
+                            WHERE (knowledge_point LIKE ? OR title LIKE ?)
+                            LIMIT ?
+                        ''', ('%' + topic_name + '%', '%' + topic_name + '%', limit * 10))
+                        resources = cursor.fetchall()
+                    
+                    # 强制添加一些Java相关的资源，确保至少有3个资源
+                    # 1. Java基础教程
+                    cursor.execute('''
+                        SELECT * FROM resources 
+                        WHERE title LIKE ? OR knowledge_point LIKE ?
+                    ''', ('%Java%', '%Java%'))
+                    java_resources = cursor.fetchall()
+                    for res in java_resources:
+                        if res not in resources:
+                            resources.append(res)
+                            if len(resources) >= limit * 5:
+                                break
+                # 对于其他编程语言，如C++、JavaScript等，也直接获取所有相关资源
+                elif topic_name in ['C++', 'JavaScript']:
+                    # 尝试获取所有相关资源（不限制难度）
+                    cursor.execute('''
+                        SELECT * FROM resources 
+                        WHERE (knowledge_point LIKE ? OR title LIKE ?)
+                        LIMIT ?
+                    ''', ('%' + topic_name + '%', '%' + topic_name + '%', limit * 5))
+                    resources = cursor.fetchall()
+                else:
+                    # 其他主题的查询
+                    cursor.execute('''
+                        SELECT * FROM resources 
+                        WHERE (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?) 
+                        AND difficulty = ?
+                        LIMIT ?
+                    ''', ('%' + topic_name + '%', '%' + topic_name + '%', '%' + topic_name + '%', level or '初级', limit * 5))
+                    resources = cursor.fetchall()
+                    
+                    # 如果还是没有，尝试获取与主题相关的其他资源
+                    if not resources:
+                        # 尝试获取所有与主题相关的资源（不限制难度）
+                        cursor.execute('''
+                            SELECT * FROM resources 
+                            WHERE (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?)
+                            LIMIT ?
+                        ''', ('%' + topic_name + '%', '%' + topic_name + '%', '%' + topic_name + '%', limit * 5))
+                        resources = cursor.fetchall()
+                    
+                    # 如果还是没有，为C++、JavaScript等编程语言添加特定资源
+                    if not resources and topic_name in ['C++', 'JavaScript']:
+                        # 对于C++，尝试获取C++基础教程
+                        if topic_name == 'C++':
+                            cursor.execute('''
+                                SELECT * FROM resources 
+                                WHERE (title LIKE ? OR knowledge_point LIKE ?)
+                                AND difficulty = ?
+                                LIMIT ?
+                            ''', ('%C++%', '%C++%', level or '初级', limit * 5))
+                            resources = cursor.fetchall()
+                        # 对于JavaScript，尝试获取JavaScript基础教程
+                        elif topic_name == 'JavaScript':
+                            cursor.execute('''
+                                SELECT * FROM resources 
+                                WHERE (title LIKE ? OR knowledge_point LIKE ?)
+                                AND difficulty = ?
+                                LIMIT ?
+                            ''', ('%JavaScript%', '%JavaScript%', level or '初级', limit * 5))
+                            resources = cursor.fetchall()
+
+                
+                # 对于数学相关主题，获取数学基础资源
+                if '数学' in topic_name or '代数' in topic_name or '微积分' in topic_name:
+                    cursor.execute('''
                     SELECT * FROM resources 
                     WHERE difficulty = ? 
                     AND (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?)
@@ -83,7 +664,7 @@ class PathPlanner:
                 resources = cursor.fetchall()
             
             # 对于前端开发相关主题，获取前端相关资源
-            elif '前端' in topic or 'HTML' in topic or 'CSS' in topic or 'JavaScript' in topic:
+            if '前端' in topic or 'HTML' in topic or 'CSS' in topic or 'JavaScript' in topic:
                 cursor.execute('''
                     SELECT * FROM resources 
                     WHERE difficulty = ? 
@@ -103,33 +684,191 @@ class PathPlanner:
                     resources = cursor.fetchall()
             
             # 对于其他主题，获取相关的初级资源
-            if not resources:
-                # 尝试获取与原始主题相关的资源
-                if original_topic:
-                    cursor.execute('''
-                        SELECT * FROM resources 
-                        WHERE difficulty = ? 
-                        AND (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?)
-                        LIMIT ?
-                    ''', (level or '初级', '%' + original_topic + '%', '%' + original_topic + '%', '%' + original_topic + '%', limit * 3))
-                    resources = cursor.fetchall()
+            # 只有当前面没有获取到资源时，才执行后面的逻辑
+            # 避免覆盖前面已经获取到的Java等编程语言的资源
+            if not resources and original_topic:
+                # 定义与编程相关的主题
+                programming_topics = {'Python', 'Java', 'C++', '编程基础', '前端开发', 'JavaScript', 'Vue', 'React', 'Spring Boot', '系统编程', '算法', '数据结构'}
+                # 定义不相关的主题
+                unrelated_topics = ['数学', '物理', '化学', '生物', '历史', '地理', '文学', '艺术', '音乐', '体育']
                 
-                # 如果还是没有，获取通用初级资源
-                if not resources:
-                    cursor.execute('''
+                # 如果原始主题是编程相关的，只获取编程相关的资源
+                if original_topic in programming_topics:
+                    # 构建不相关主题的排除条件
+                    exclude_conditions = []
+                    exclude_params = []
+                    for unrelated in unrelated_topics:
+                        exclude_conditions.extend(['knowledge_point NOT LIKE ?', 'description NOT LIKE ?', 'title NOT LIKE ?'])
+                        exclude_params.extend(['%' + unrelated + '%', '%' + unrelated + '%', '%' + unrelated + '%'])
+                    
+                    # 构建查询语句
+                    query = '''
                         SELECT * FROM resources 
-                        WHERE difficulty = ? 
+                        WHERE (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?)
+                        AND (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?)
+                        AND ''' + ' AND '.join(exclude_conditions) + '''
                         LIMIT ?
-                    ''', (level or '初级', limit * 3))
+                    '''
+                    
+                    # 构建参数（不限制难度）
+                    params = ['%' + original_topic + '%', '%' + original_topic + '%', '%' + original_topic + '%', '%编程%', '%代码%', '%编程%'] + exclude_params + [limit * 3]
+                    cursor.execute(query, params)
+                else:
+                    # 否则，获取与原始主题相关的资源
+                    # 同样排除不相关主题
+                    exclude_conditions = []
+                    exclude_params = []
+                    for unrelated in unrelated_topics:
+                        exclude_conditions.extend(['knowledge_point NOT LIKE ?', 'description NOT LIKE ?', 'title NOT LIKE ?'])
+                        exclude_params.extend(['%' + unrelated + '%', '%' + unrelated + '%', '%' + unrelated + '%'])
+                    
+                    # 构建查询语句
+                    query = '''
+                        SELECT * FROM resources 
+                        WHERE (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?)
+                        AND ''' + ' AND '.join(exclude_conditions) + '''
+                        LIMIT ?
+                    '''
+                    
+                    # 构建参数（不限制难度）
+                    params = ['%' + original_topic + '%', '%' + original_topic + '%', '%' + original_topic + '%'] + exclude_params + [limit * 3]
+                    cursor.execute(query, params)
+                resources = cursor.fetchall()
+            
+            # 如果还是没有，获取与原始主题相关的通用资源
+            if not resources and original_topic:
+                # 定义与编程相关的主题
+                programming_topics = {'Python', 'Java', 'C++', '编程基础', '前端开发', 'JavaScript', 'Vue', 'React', 'Spring Boot', '系统编程', '算法', '数据结构'}
+                # 定义不相关的主题
+                unrelated_topics = ['数学', '物理', '化学', '生物', '历史', '地理', '文学', '艺术', '音乐', '体育']
+                
+                # 如果原始主题是编程相关的，只获取编程相关的资源
+                if original_topic in programming_topics:
+                    # 构建不相关主题的排除条件
+                    exclude_conditions = []
+                    exclude_params = []
+                    for unrelated in unrelated_topics:
+                        exclude_conditions.extend(['knowledge_point NOT LIKE ?', 'description NOT LIKE ?', 'title NOT LIKE ?'])
+                        exclude_params.extend(['%' + unrelated + '%', '%' + unrelated + '%', '%' + unrelated + '%'])
+                    
+                    # 构建查询语句
+                    query = '''
+                        SELECT * FROM resources 
+                        WHERE (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?)
+                        AND ''' + ' AND '.join(exclude_conditions) + '''
+                        LIMIT ?'''
+                        
+                    # 构建参数（不限制难度）
+                    params = ['%编程%', '%代码%', '%编程%'] + exclude_params + [limit * 3]
+                    cursor.execute(query, params)
                     resources = cursor.fetchall()
         
-        # 过滤掉已使用的资源
+        # 过滤掉已使用的资源和与难度不匹配的资源
         filtered_resources = []
-        for res in resources:
-            if res[0] not in used_ids:
-                filtered_resources.append(res)
-                if len(filtered_resources) >= limit:
-                    break
+        
+        # 优先处理Python相关资源
+        if 'Python' in topic:
+            # 优先添加Python相关的资源
+            python_resources = []
+            other_resources = []
+            
+            for res in resources:
+                # 对于Python主题，即使资源已被使用，也可以重新推荐Python相关资源
+                # 确保资源难度与当前级别匹配
+                if level:
+                    # 对于初级用户，只推荐初级资源
+                    if level == '初级' and res[4] != '初级':
+                        continue
+                    # 对于中级用户，推荐初级和中级资源
+                    elif level == '中级' and res[4] == '高级':
+                        continue
+                    # 对于高级用户，推荐所有级别资源
+                
+                # 区分Python相关和非Python相关资源
+                if 'Python' in res[1] or 'Python' in (res[2] or '') or 'Python' in (res[3] or ''):
+                    python_resources.append(res)
+                else:
+                    other_resources.append(res)
+            
+            # 对Python资源进行排序，优先推荐Python基础教程
+            if level == '初级':
+                # 优先推荐包含"基础"、"入门"等关键词的资源
+                basic_resources = []
+                advanced_resources = []
+                for res in python_resources:
+                    title_lower = (res[1] or '').lower()
+                    if '基础' in title_lower or '入门' in title_lower or 'tutorial' in title_lower:
+                        basic_resources.append(res)
+                    else:
+                        advanced_resources.append(res)
+                # 优先使用基础资源
+                python_resources = basic_resources + advanced_resources
+            
+            # 优先使用Python相关资源
+            filtered_resources = python_resources + other_resources
+            # 限制数量
+            filtered_resources = filtered_resources[:limit]
+        else:
+            # 对于非Python主题，使用原始逻辑
+            # 提取主题名称（去除难度级别部分）
+            topic_name = topic.split(' ')[0].split('(')[0]
+            
+            for res in resources:
+                if res[0] not in used_ids:
+                    # 确保资源难度与当前级别匹配
+                    if level:
+                        # 对于Java、C++等编程语言，忽略难度字段的限制（因为数据库中的难度字段是乱码）
+                        if topic_name not in ['Java', 'C++', 'JavaScript']:
+                            # 对于初级用户，只推荐初级资源
+                            if level == '初级' and res[4] != '初级':
+                                continue
+                            # 对于中级用户，推荐初级和中级资源
+                            elif level == '中级' and res[4] == '高级':
+                                continue
+                            # 对于高级用户，推荐所有级别资源
+                    
+                    # 检查资源是否与主题相关
+                    resource_text = ''
+                    for i in range(1, min(5, len(res))):
+                        if res[i]:
+                            resource_text += str(res[i]) + ' '
+                    
+                    if '编程基础' in topic:
+                        # 对于编程基础主题，只推荐与编程相关的资源
+                        programming_keywords = ['编程', '代码', '算法', '数据结构', '计算机', '技术', '前端', '后端', '开发', '软件', '程序', '语言', '语法', '逻辑', '调试', '版本控制', 'Git', 'Linux', '命令行', '终端', '编辑器', 'IDE', '环境', '配置', 'HTML', 'CSS', 'JavaScript', '前端开发']
+                        unrelated_keywords = ['数学', '物理', '化学', '生物', '历史', '地理', '文学', '艺术', '音乐', '体育']
+                        
+                        # 检查是否包含编程相关关键词
+                        has_programming_keyword = any(keyword in resource_text for keyword in programming_keywords)
+                        # 检查是否包含不相关关键词
+                        has_unrelated_keyword = any(keyword in resource_text for keyword in unrelated_keywords)
+                        
+                        # 只有包含编程相关关键词且不包含不相关关键词的资源才被推荐
+                        if not has_programming_keyword or has_unrelated_keyword:
+                            continue
+                    
+                    filtered_resources.append(res)
+                    if len(filtered_resources) >= limit:
+                        break
+            
+            # 对于Java主题，如果资源数量不足，强制添加一些Java相关资源
+            if topic_name == 'Java' and len(filtered_resources) < limit:
+                # 再次查询所有Java相关资源
+                conn = sqlite3.connect('data/learning.db')
+                cursor = conn.cursor()
+                cursor.execute('''
+                    SELECT * FROM resources 
+                    WHERE knowledge_point = ?
+                ''', (topic_name,))
+                all_java_resources = cursor.fetchall()
+                conn.close()
+                
+                # 添加未使用的Java资源
+                for res in all_java_resources:
+                    if res[0] not in used_ids and res not in filtered_resources:
+                        filtered_resources.append(res)
+                        if len(filtered_resources) >= limit:
+                            break
         
         conn.close()
         return filtered_resources
@@ -242,6 +981,13 @@ class PathPlanner:
         path = []
         visited = set()
         
+        # 定义水平优先级
+        level_priority = {'初级': 1, '中级': 2, '高级': 3}
+        current_priority = level_priority.get(current_level, 1)
+        
+        # 定义与编程相关的主题
+        programming_topics = {'Python', 'Java', 'C++', '编程基础', '前端开发', 'JavaScript', 'Vue', 'React', 'Spring Boot', '系统编程', '算法', '数据结构'}
+        
         def dfs(topic, level):
             if topic in visited:
                 return
@@ -253,7 +999,18 @@ class PathPlanner:
             # 先处理前置知识
             for prereq in prerequisites:
                 if prereq not in visited:
-                    dfs(prereq, '初级' if level == '初级' else '初级')
+                    # 根据用户当前水平决定是否添加前置知识
+                    # 如果用户水平是中级或高级，跳过初级前置知识
+                    if current_priority >= 2:
+                        # 跳过所有初级前置知识
+                        continue
+                    
+                    # 只有当前置知识与编程相关时才添加
+                    if target_topic in programming_topics and prereq not in programming_topics:
+                        # 跳过与编程无关的前置知识
+                        continue
+                    
+                    dfs(prereq, '初级')
             
             # 添加当前主题到路径
             path.append((topic, level))
@@ -267,6 +1024,12 @@ class PathPlanner:
         """优化学习路径，根据目标调整顺序和内容"""
         optimized_path = []
         
+        # 提取编程基础相关的项目
+        programming_basics = [item for item in path if '编程基础' in item[0]]
+        
+        # 提取其他项目
+        other_items = [item for item in path if item not in programming_basics]
+        
         # 根据目标调整路径
         if goal == '找工作':
             # 找工作目标：优先核心技能，增加项目实践
@@ -274,24 +1037,30 @@ class PathPlanner:
             project_topics = ['项目开发', '实战']
             
             # 优先处理核心技能
-            core_path = [item for item in path if any(core in item[0] for core in core_topics)]
-            other_path = [item for item in path if item not in core_path]
-            optimized_path = core_path + other_path
+            core_path = [item for item in other_items if any(core in item[0] for core in core_topics)]
+            non_core_path = [item for item in other_items if item not in core_path]
+            
+            # 确保编程基础在最前面
+            optimized_path = programming_basics + core_path + non_core_path
         
         elif goal == '项目开发':
             # 项目开发目标：提前引入项目实践
-            optimized_path = path
+            # 确保编程基础在最前面
+            optimized_path = programming_basics + other_items
             # 在适当位置插入项目实践
-            if len(path) > 2:
-                mid_point = len(path) // 2
+            if len(optimized_path) > 2:
+                mid_point = len(optimized_path) // 2
                 optimized_path.insert(mid_point, ('项目实践', '中级'))
         
         elif goal == '兴趣学习':
             # 兴趣学习目标：保持趣味性，减少理论
-            optimized_path = [item for item in path if '理论' not in item[0]]
+            # 确保编程基础在最前面
+            non_theory_items = [item for item in other_items if '理论' not in item[0]]
+            optimized_path = programming_basics + non_theory_items
         
         else:
-            optimized_path = path
+            # 确保编程基础在最前面
+            optimized_path = programming_basics + other_items
         
         return optimized_path
     
@@ -329,10 +1098,10 @@ class PathPlanner:
         used_resource_ids = set()  # 用于跟踪已使用的资源ID，避免重复推荐
         
         for i, (stage_topic, stage_level) in enumerate(optimized_path):
-            # 获取资源，传递原始主题和已使用的资源ID
+            # 获取资源，传递原始主题、已使用的资源ID和学习目标
             filtered_resources = self._get_resources_by_topic(
                 stage_topic, stage_level, original_topic=topic, 
-                used_resource_ids=used_resource_ids, limit=3
+                used_resource_ids=used_resource_ids, limit=3, goal=goal
             )
             
             # 记录使用的资源ID
@@ -344,7 +1113,7 @@ class PathPlanner:
                 # 尝试获取更多资源，不传递used_resource_ids，以获取所有可能的资源
                 more_resources = self._get_resources_by_topic(
                     stage_topic, stage_level, original_topic=topic, 
-                    limit=5
+                    limit=5, goal=goal
                 )
                 # 手动过滤已使用的资源
                 new_resources = []

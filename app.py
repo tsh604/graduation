@@ -98,6 +98,11 @@ class DialogueManager:
         """提取学习主题 - 增强版"""
         message_lower = message.lower().strip()
         
+        # 检查是否是后续学习请求，如果是，返回None
+        follow_up_keywords = ["后续", "之后", "然后", "接着", "下一步", "学完", "之后学", "接下来", "进阶"]
+        if any(word in message_lower for word in follow_up_keywords):
+            return None
+        
         # 直接匹配单个词的主题
         direct_matches = {
             "python": "Python",
@@ -144,7 +149,9 @@ class DialogueManager:
             "英语": "英语",
             "日语": "日语",
             "法语": "法语",
-            "德语": "德语"
+            "德语": "德语",
+            "运维": "运维",
+            "工具": "工具"
         }
         
         for key, value in topics.items():
@@ -157,7 +164,7 @@ class DialogueManager:
         match = re.search(r'(?:我想学习|学习|想学)\s*(.+?)[。？！]?', message)
         if match:
             topic = match.group(1).strip()
-            if topic:
+            if topic and not any(word in topic for word in follow_up_keywords):
                 return topic
         
         # 如果没有匹配，可能是新主题，用大模型提取
@@ -264,7 +271,11 @@ class DialogueManager:
             
             # 解析大模型返回的JSON
             import json
-            resources = json.loads(result)
+            try:
+                resources = json.loads(result)
+            except json.JSONDecodeError:
+                # 如果JSON解析失败，返回友好的错误信息
+                return f'抱歉，搜索到的资源格式不正确。你可以尝试学习其他内容，或者稍后再试。'
             
             # 验证返回的数据格式
             if not isinstance(resources, list) or len(resources) == 0:
@@ -310,6 +321,13 @@ class DialogueManager:
             "没事了", "好的谢谢", "ok", "好的", "不了", "不用谢谢",
             "不必了", "就这样", "可以了", "好了", "知道了"
         ]
+        
+        # 检查是否包含解释关键词，避免将解释请求误识别为感谢/拒绝类消息
+        explain_keywords = ["解释", "是什么", "什么意思", "什么是", "介绍", "介绍一下", "能说说", "能解释", "讲解", "说明"]
+        if any(keyword in message_lower for keyword in explain_keywords):
+            return False
+        
+        # 只有当消息中包含感谢/拒绝类关键词，且不包含解释关键词时，才识别为感谢/拒绝类消息
         return any(word in message_lower for word in thanks_keywords)
     
     @staticmethod
@@ -517,19 +535,23 @@ class DialogueManager:
         follow_up_keywords = ["后续", "之后", "然后", "接着", "下一步", "学完", "之后学", "接下来", "进阶"]
         if any(word in message_lower for word in follow_up_keywords):
             topic = context.get('topic', '编程')
+            initial_level = context.get('level', '初级')
+            
+            # 基于初始水平推断当前水平
+            current_level = "中级" if initial_level == "初级" else "高级"
             
             # 从知识图谱获取相关进阶主题
             from knowledge_graph import knowledge_graph
             if topic in knowledge_graph:
                 related = knowledge_graph[topic].get("related", [])
                 if related:
-                    response = f"学完{topic}基础后，建议你可以学习：\n"
+                    response = f"学完{topic}{initial_level}内容后，你已经具备了{current_level}水平，建议你可以学习：\n"
                     for i, r in enumerate(related[:3], 1):
                         response += f"{i}. {r}\n"
                     response += f"\n你想了解哪个方向的详细学习路径吗？或者需要我解释某个方向是什么吗？"
                     return response
             
-            return f"学完{topic}基础后，可以继续学习进阶内容，或者结合实际项目来巩固。你对哪个方向特别感兴趣？"
+            return f"学完{topic}{initial_level}内容后，你已经具备了{current_level}水平，可以继续学习进阶内容，或者结合实际项目来巩固。你对哪个方向特别感兴趣？"
         
         # ========== 优先级3：更多资源 ==========
         more_keywords = ["更多", "还有吗", "其他的", "别的", "additional", "extra", "另外"]
@@ -655,6 +677,12 @@ class DialogueManager:
         if any(keyword in message_lower for keyword in ['资源库', '有什么资源', '资源', '学习资源', '浏览资源']):
             return "我已经为你准备了学习资源库，你可以点击聊天界面上方的'浏览资源库'按钮来查看所有可用的学习领域。"
         
+        # 检查是否是解释请求（所有阶段都优先处理）
+        explain_keywords = ["解释", "是什么", "什么意思", "什么是", "介绍", "介绍一下", "能说说", "能解释", "讲解", "说明"]
+        if any(keyword in message_lower for keyword in explain_keywords):
+            # 直接调用处理后续对话的方法，处理解释请求
+            return DialogueManager._handle_followup(user_message, context)
+        
         # 根据当前阶段处理
         if stage == 'initial':
             # 第一次对话：直接尝试提取主题
@@ -688,6 +716,32 @@ class DialogueManager:
         
         # 处理子主题询问
         elif stage == 'asking_subtopic':
+            # 检查用户是否输入了新的主题
+            new_topic = DialogueManager._extract_topic(user_message)
+            if new_topic and new_topic != context.get('topic'):
+                # 重置对话状态，开始新的对话
+                context['topic'] = new_topic
+                # 先检查是否有相关资源
+                if not DialogueManager._has_resources(new_topic):
+                    state['stage'] = 'asking_subtopic'
+                    return f"暂时没有找到{new_topic}的相关资源。你想学习{new_topic}的什么具体内容？我可以为你搜索相关资源。"
+                else:
+                    state['stage'] = 'asking_level'
+                    # 根据学习主题选择合适的问话方式
+                    # 编程相关主题
+                    programming_topics = ['Python', 'Java', 'C++', '前端开发', '后端开发', '机器学习', '数据分析', 'Vue', 'React', '数据库', 'Linux', 'Docker', 'Git', 'Go语言', 'Rust']
+                    # 语言学习相关主题
+                    language_topics = ['英语', '日语', '法语', '德语']
+                    # 其他主题
+                    other_topics = ['数学', '物理学', '化学', '生物学', '历史', '地理', '经济学', '哲学', '艺术']
+                    
+                    if any(programming in new_topic for programming in programming_topics):
+                        return f"好的，你想学{new_topic}。你是编程初学者还是有一定编程基础？"
+                    elif any(language in new_topic for language in language_topics):
+                        return f"好的，你想学{new_topic}。你是语言初学者还是有一定语言基础？"
+                    else:
+                        return f"好的，你想学{new_topic}。你是初学者还是有一定基础？"
+            
             subtopic = user_message.strip()
             context['subtopic'] = subtopic
             # 搜索并添加资源
@@ -724,7 +778,7 @@ class DialogueManager:
                 return "我没太明白你想学什么。能具体说一下吗？比如：Python、Java、前端开发等"
         
         elif stage == 'asking_level':
-            # 提取难度级别
+            # 先尝试提取难度级别
             level = DialogueManager._extract_level(user_message)
             
             if level:
@@ -732,6 +786,33 @@ class DialogueManager:
                 state['stage'] = 'asking_goal'
                 return f"你主要想达到什么学习目标？比如：找工作、兴趣学习、项目开发等"
             else:
+                # 检查用户是否输入了新的主题
+                new_topic = DialogueManager._extract_topic(user_message)
+                if new_topic and new_topic != context.get('topic'):
+                    # 重置对话状态，开始新的对话
+                    context['topic'] = new_topic
+                    # 先检查是否有相关资源
+                    if not DialogueManager._has_resources(new_topic):
+                        state['stage'] = 'asking_subtopic'
+                        return f"暂时没有找到{new_topic}的相关资源。你想学习{new_topic}的什么具体内容？我可以为你搜索相关资源。"
+                    else:
+                        state['stage'] = 'asking_level'
+                        # 根据学习主题选择合适的问话方式
+                        # 编程相关主题
+                        programming_topics = ['Python', 'Java', 'C++', '前端开发', '后端开发', '机器学习', '数据分析', 'Vue', 'React', '数据库', 'Linux', 'Docker', 'Git', 'Go语言', 'Rust']
+                        # 语言学习相关主题
+                        language_topics = ['英语', '日语', '法语', '德语']
+                        # 其他主题
+                        other_topics = ['数学', '物理学', '化学', '生物学', '历史', '地理', '经济学', '哲学', '艺术']
+                        
+                        if any(programming in new_topic for programming in programming_topics):
+                            return f"好的，你想学{new_topic}。你是编程初学者还是有一定编程基础？"
+                        elif any(language in new_topic for language in language_topics):
+                            return f"好的，你想学{new_topic}。你是语言初学者还是有一定语言基础？"
+                        else:
+                            return f"好的，你想学{new_topic}。你是初学者还是有一定基础？"
+                
+                # 如果不是新主题，继续追问基础水平
                 # 根据学习主题选择合适的问话方式
                 topic = context.get('topic', '')
                 # 编程相关主题
@@ -943,5 +1024,6 @@ def search_resource():
         return jsonify({'status': 'error', 'message': f'搜索资源失败: {str(e)}'})
 
 if __name__ == '__main__':
+    # 清空对话状态
     dialogue_state.clear()
-    app.run(debug=True, port=8000)
+    app.run(debug=True, port=7777)
