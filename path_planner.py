@@ -4,13 +4,14 @@
 """
 from knowledge_graph import knowledge_graph
 import sqlite3
+import random
 
 class PathPlanner:
     def __init__(self, db_path='data/learning.db'):
         self.db_path = db_path
         self.kg = knowledge_graph
     
-    def _get_resources_by_topic(self, topic, level=None, limit=3, original_topic=None, used_resource_ids=None, goal=None):
+    def _get_resources_by_topic(self, topic, level=None, limit=3, original_topic=None, used_resource_ids=None, goal=None, money_budget=None):
         """根据主题和难度获取资源
         
         Args:
@@ -20,6 +21,7 @@ class PathPlanner:
             original_topic: 原始目标主题（用于获取相关的基础资源）
             used_resource_ids: 已使用的资源ID集合，用于避免重复推荐
             goal: 学习目标
+            money_budget: 金钱预算（元）
         """
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
@@ -90,8 +92,19 @@ class PathPlanner:
                 
                 # 根据学习目标添加特定的Python资源
                 if goal == '找工作':
-                    # 找工作目标：优先添加LeetCode等面试相关资源
-                    # 1. LeetCode Python题库
+                    # 找工作目标：优先添加系统学习资源和面试相关资源
+                    # 1. Python 100天教程（系统的学习资源，对找工作也很有帮助）
+                    cursor.execute('''
+                        SELECT * FROM resources 
+                        WHERE title LIKE ? AND difficulty = ?
+                    ''', ('%100天%', level))
+                    python100 = cursor.fetchone()
+                    if python100 and python100 not in resources:
+                        resources.append(python100)
+                        if len(resources) >= limit:
+                            pass
+                    
+                    # 2. LeetCode Python题库
                     cursor.execute('''
                         SELECT * FROM resources 
                         WHERE title LIKE ? AND difficulty = ?
@@ -102,7 +115,7 @@ class PathPlanner:
                         if len(resources) >= limit:
                             pass
                     
-                    # 2. 廖雪峰Python教程
+                    # 3. 廖雪峰Python教程
                     cursor.execute('''
                         SELECT * FROM resources 
                         WHERE title LIKE ? AND difficulty = ?
@@ -116,7 +129,7 @@ class PathPlanner:
                     # 兴趣学习目标：优先添加趣味性强的Python资源
                     # 1. Python 100天教程
                     cursor.execute('''
-                        SELECT * FROM resources 
+                        SELECT *, learning_time FROM resources 
                         WHERE title LIKE ? AND difficulty = ?
                     ''', ('%100天%', level))
                     python100 = cursor.fetchone()
@@ -139,7 +152,7 @@ class PathPlanner:
                     # 项目开发目标：优先添加与项目开发相关的Python资源
                     # 1. Jupyter教程
                     cursor.execute('''
-                        SELECT * FROM resources 
+                        SELECT *, learning_time FROM resources 
                         WHERE title LIKE ? AND difficulty = ?
                     ''', ('%Jupyter%', level))
                     jupyter = cursor.fetchone()
@@ -150,7 +163,7 @@ class PathPlanner:
                     
                     # 2. PyCharm指南
                     cursor.execute('''
-                        SELECT * FROM resources 
+                        SELECT *, learning_time FROM resources 
                         WHERE title LIKE ? AND difficulty = ?
                     ''', ('%PyCharm%', level))
                     pycharm = cursor.fetchone()
@@ -165,7 +178,7 @@ class PathPlanner:
                     if goal == '找工作':
                         # 找工作目标：优先包含"面试"、"就业"、"项目"等关键词的资源
                         cursor.execute('''
-                            SELECT * FROM resources 
+                            SELECT *, learning_time FROM resources 
                             WHERE (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?)
                             AND title NOT LIKE ?
                             AND (title LIKE ? OR description LIKE ? OR knowledge_point LIKE ?)
@@ -174,7 +187,7 @@ class PathPlanner:
                     elif goal == '兴趣学习':
                         # 兴趣学习目标：优先包含"趣味"、"入门"、"实践"等关键词的资源
                         cursor.execute('''
-                            SELECT * FROM resources 
+                            SELECT *, learning_time FROM resources 
                             WHERE (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?)
                             AND title NOT LIKE ?
                             AND (title LIKE ? OR description LIKE ? OR knowledge_point LIKE ?)
@@ -183,7 +196,7 @@ class PathPlanner:
                     elif goal == '项目开发':
                         # 项目开发目标：优先包含"项目"、"实战"、"开发"等关键词的资源
                         cursor.execute('''
-                            SELECT * FROM resources 
+                            SELECT *, learning_time FROM resources 
                             WHERE (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?)
                             AND title NOT LIKE ?
                             AND (title LIKE ? OR description LIKE ? OR knowledge_point LIKE ?)
@@ -192,7 +205,7 @@ class PathPlanner:
                     else:
                         # 其他目标：使用基本查询
                         cursor.execute('''
-                            SELECT * FROM resources 
+                            SELECT *, learning_time FROM resources 
                             WHERE (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?)
                             AND title NOT LIKE ?
                             LIMIT ?
@@ -204,7 +217,7 @@ class PathPlanner:
                 # 如果还是没有足够的资源，获取所有Python资源
                 if not resources or len(resources) < limit:
                     cursor.execute('''
-                        SELECT * FROM resources 
+                        SELECT *, learning_time FROM resources 
                         WHERE (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?)
                         AND title NOT LIKE ?
                         LIMIT ?
@@ -215,7 +228,7 @@ class PathPlanner:
             else:
                 # 基础SQL查询
                 base_query = '''
-                    SELECT * FROM resources 
+                    SELECT *, learning_time FROM resources 
                     WHERE (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?) 
                     AND difficulty = ?
                 '''
@@ -251,7 +264,7 @@ class PathPlanner:
         else:
             # 没有指定难度级别时的查询
             cursor.execute('''
-                SELECT * FROM resources 
+                SELECT *, learning_time FROM resources 
                 WHERE knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?
                 LIMIT ?
             ''', ('%' + topic + '%', '%' + topic + '%', '%' + topic + '%', limit * 3))  # 获取更多资源以便过滤
@@ -268,7 +281,7 @@ class PathPlanner:
                 if goal == '找工作':
                     # 找工作目标：优先包含"面试"、"就业"、"项目"等关键词的资源
                     cursor.execute('''
-                        SELECT * FROM resources 
+                        SELECT *, learning_time FROM resources 
                         WHERE difficulty = ? 
                         AND (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?)
                         AND NOT (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?)
@@ -279,7 +292,7 @@ class PathPlanner:
                 elif goal == '兴趣学习':
                     # 兴趣学习目标：优先包含"趣味"、"入门"、"实践"等关键词的资源
                     cursor.execute('''
-                        SELECT * FROM resources 
+                        SELECT *, learning_time FROM resources 
                         WHERE difficulty = ? 
                         AND (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?)
                         AND NOT (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?)
@@ -290,7 +303,7 @@ class PathPlanner:
                 elif goal == '项目开发':
                     # 项目开发目标：优先包含"项目"、"实战"、"开发"等关键词的资源
                     cursor.execute('''
-                        SELECT * FROM resources 
+                        SELECT *, learning_time FROM resources 
                         WHERE difficulty = ? 
                         AND (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?)
                         AND NOT (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?)
@@ -301,7 +314,7 @@ class PathPlanner:
                 else:
                     # 其他目标：使用基本查询
                     cursor.execute('''
-                        SELECT * FROM resources 
+                        SELECT *, learning_time FROM resources 
                         WHERE difficulty = ? 
                         AND (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?)
                         AND NOT (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?)
@@ -313,7 +326,7 @@ class PathPlanner:
                 # 如果还是没有，再尝试获取通用编程资源
                 if not resources:
                     cursor.execute('''
-                        SELECT * FROM resources 
+                        SELECT *, learning_time FROM resources 
                         WHERE difficulty = ? 
                         AND (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?)
                         AND NOT (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?)
@@ -326,7 +339,7 @@ class PathPlanner:
                 if not resources:
                     # 获取前端相关资源
                     cursor.execute('''
-                        SELECT * FROM resources 
+                        SELECT *, learning_time FROM resources 
                         WHERE difficulty = ? 
                         AND (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?)
                         AND NOT (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?)
@@ -338,7 +351,7 @@ class PathPlanner:
                 # 如果还是没有，尝试获取Linux相关资源
                 if not resources:
                     cursor.execute('''
-                        SELECT * FROM resources 
+                        SELECT *, learning_time FROM resources 
                         WHERE difficulty = ? 
                         AND (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?)
                         AND NOT (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?)
@@ -350,7 +363,7 @@ class PathPlanner:
                 # 如果还是没有，尝试获取Git相关资源
                 if not resources:
                     cursor.execute('''
-                        SELECT * FROM resources 
+                        SELECT *, learning_time FROM resources 
                         WHERE difficulty = ? 
                         AND (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?)
                         AND NOT (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?)
@@ -362,7 +375,7 @@ class PathPlanner:
                 # 如果还是没有，尝试获取算法相关资源
                 if not resources:
                     cursor.execute('''
-                        SELECT * FROM resources 
+                        SELECT *, learning_time FROM resources 
                         WHERE difficulty = ? 
                         AND (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?)
                         AND NOT (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?)
@@ -374,7 +387,7 @@ class PathPlanner:
                 # 如果还是没有，尝试获取数据库相关资源
                 if not resources:
                     cursor.execute('''
-                        SELECT * FROM resources 
+                        SELECT *, learning_time FROM resources 
                         WHERE difficulty = ? 
                         AND (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?)
                         AND NOT (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?)
@@ -573,7 +586,134 @@ class PathPlanner:
                 # 尝试获取与主题相关的资源
                 # 对于Java，直接查询knowledge_point为Java的资源
                 if topic_name == 'Java':
-                    # 尝试获取所有Java相关资源（不限制难度）
+                    # 尝试获取与用户水平匹配的Java相关资源
+                    if level:
+                        # 首先查询指定难度的资源
+                        cursor.execute('''
+                            SELECT * FROM resources 
+                            WHERE (knowledge_point = ? OR title LIKE ? OR description LIKE ?) 
+                            AND difficulty = ?
+                            LIMIT ?
+                        ''', (topic_name, '%' + topic_name + '%', '%' + topic_name + '%', level, limit * 10))
+                        resources = cursor.fetchall()
+                        
+                        # 如果没有足够的资源，尝试获取更低难度的资源
+                        if len(resources) < limit:
+                            if level == '中级':
+                                # 中级用户可以使用初级资源
+                                cursor.execute('''
+                                    SELECT * FROM resources 
+                                    WHERE (knowledge_point = ? OR title LIKE ? OR description LIKE ?) 
+                                    AND difficulty = '初级'
+                                    LIMIT ?
+                                ''', (topic_name, '%' + topic_name + '%', '%' + topic_name + '%', limit * 5))
+                                beginner_resources = cursor.fetchall()
+                                resources.extend(beginner_resources)
+                            elif level == '高级':
+                                # 高级用户可以使用初级和中级资源
+                                cursor.execute('''
+                                    SELECT * FROM resources 
+                                    WHERE (knowledge_point = ? OR title LIKE ? OR description LIKE ?) 
+                                    AND difficulty IN ('初级', '中级')
+                                    LIMIT ?
+                                ''', (topic_name, '%' + topic_name + '%', '%' + topic_name + '%', limit * 5))
+                                lower_resources = cursor.fetchall()
+                                resources.extend(lower_resources)
+                    else:
+                        # 没有指定难度级别，获取所有Java相关资源
+                        cursor.execute('''
+                            SELECT * FROM resources 
+                            WHERE knowledge_point = ?
+                            LIMIT ?
+                        ''', (topic_name, limit * 10))
+                        resources = cursor.fetchall()
+                    
+                    # 如果还是没有，尝试获取所有包含Java的资源
+                    if not resources:
+                        if level:
+                            cursor.execute('''
+                                SELECT * FROM resources 
+                                WHERE (knowledge_point LIKE ? OR title LIKE ? OR description LIKE ?) 
+                                AND difficulty = ?
+                                LIMIT ?
+                            ''', ('%' + topic_name + '%', '%' + topic_name + '%', '%' + topic_name + '%', level, limit * 10))
+                        else:
+                            cursor.execute('''
+                                SELECT * FROM resources 
+                                WHERE (knowledge_point LIKE ? OR title LIKE ?)
+                                LIMIT ?
+                            ''', ('%' + topic_name + '%', '%' + topic_name + '%', limit * 10))
+                        resources = cursor.fetchall()
+                    
+                    # 只添加与用户水平匹配的Java相关资源
+                    # 1. Java基础教程
+                    if level:
+                        cursor.execute('''
+                            SELECT * FROM resources 
+                            WHERE (title LIKE ? OR knowledge_point LIKE ?) 
+                            AND difficulty = ?
+                        ''', ('%Java%', '%Java%', level))
+                    else:
+                        cursor.execute('''
+                            SELECT * FROM resources 
+                            WHERE title LIKE ? OR knowledge_point LIKE ?
+                        ''', ('%Java%', '%Java%'))
+                    java_resources = cursor.fetchall()
+                    for res in java_resources:
+                        if res not in resources:
+                            resources.append(res)
+                            if len(resources) >= limit * 5:
+                                break
+                # 对于算法，直接查询knowledge_point为算法的资源
+                elif topic_name == '算法':
+                    # 尝试获取与用户水平匹配的算法相关资源
+                    if level:
+                        cursor.execute('''
+                            SELECT * FROM resources 
+                            WHERE (knowledge_point = ? OR title LIKE ? OR description LIKE ?) 
+                            AND difficulty = ?
+                            LIMIT ?
+                        ''', (topic_name, '%' + topic_name + '%', '%' + topic_name + '%', level, limit * 10))
+                    else:
+                        # 没有指定难度级别，获取所有算法相关资源
+                        cursor.execute('''
+                            SELECT * FROM resources 
+                            WHERE knowledge_point = ?
+                            LIMIT ?
+                        ''', (topic_name, limit * 10))
+                    resources = cursor.fetchall()
+                    
+                    # 如果还是没有，尝试获取所有包含算法的资源
+                    if not resources:
+                        if level:
+                            cursor.execute('''
+                                SELECT * FROM resources 
+                                WHERE (knowledge_point LIKE ? OR title LIKE ? OR description LIKE ?) 
+                                AND difficulty = ?
+                                LIMIT ?
+                            ''', ('%' + topic_name + '%', '%' + topic_name + '%', '%' + topic_name + '%', level, limit * 10))
+                        else:
+                            cursor.execute('''
+                                SELECT * FROM resources 
+                                WHERE (knowledge_point LIKE ? OR title LIKE ?)
+                                LIMIT ?
+                            ''', ('%' + topic_name + '%', '%' + topic_name + '%', limit * 10))
+                        resources = cursor.fetchall()
+                    
+                    # 强制添加一些算法相关的资源，确保至少有3个资源
+                    cursor.execute('''
+                        SELECT * FROM resources 
+                        WHERE title LIKE ? OR knowledge_point LIKE ?
+                    ''', ('%算法%', '%算法%'))
+                    algorithm_resources = cursor.fetchall()
+                    for res in algorithm_resources:
+                        if res not in resources:
+                            resources.append(res)
+                            if len(resources) >= limit * 5:
+                                break
+                # 对于深度学习，直接查询knowledge_point为深度学习的资源
+                elif topic_name == '深度学习':
+                    # 尝试获取所有深度学习相关资源（不限制难度）
                     cursor.execute('''
                         SELECT * FROM resources 
                         WHERE knowledge_point = ?
@@ -581,7 +721,7 @@ class PathPlanner:
                     ''', (topic_name, limit * 10))
                     resources = cursor.fetchall()
                     
-                    # 如果还是没有，尝试获取所有包含Java的资源
+                    # 如果还是没有，尝试获取所有包含深度学习的资源
                     if not resources:
                         cursor.execute('''
                             SELECT * FROM resources 
@@ -590,14 +730,73 @@ class PathPlanner:
                         ''', ('%' + topic_name + '%', '%' + topic_name + '%', limit * 10))
                         resources = cursor.fetchall()
                     
-                    # 强制添加一些Java相关的资源，确保至少有3个资源
-                    # 1. Java基础教程
+                    # 强制添加一些深度学习相关的资源，确保至少有3个资源
                     cursor.execute('''
                         SELECT * FROM resources 
                         WHERE title LIKE ? OR knowledge_point LIKE ?
-                    ''', ('%Java%', '%Java%'))
-                    java_resources = cursor.fetchall()
-                    for res in java_resources:
+                    ''', ('%深度学习%', '%深度学习%'))
+                    deep_learning_resources = cursor.fetchall()
+                    for res in deep_learning_resources:
+                        if res not in resources:
+                            resources.append(res)
+                            if len(resources) >= limit * 5:
+                                break
+                # 对于数据分析，直接查询knowledge_point为数据分析的资源
+                elif topic_name == '数据分析':
+                    # 尝试获取所有数据分析相关资源（不限制难度）
+                    cursor.execute('''
+                        SELECT * FROM resources 
+                        WHERE knowledge_point = ?
+                        LIMIT ?
+                    ''', (topic_name, limit * 10))
+                    resources = cursor.fetchall()
+                    
+                    # 如果还是没有，尝试获取所有包含数据分析的资源
+                    if not resources:
+                        cursor.execute('''
+                            SELECT * FROM resources 
+                            WHERE (knowledge_point LIKE ? OR title LIKE ?)
+                            LIMIT ?
+                        ''', ('%' + topic_name + '%', '%' + topic_name + '%', limit * 10))
+                        resources = cursor.fetchall()
+                    
+                    # 强制添加一些数据分析相关的资源，确保至少有3个资源
+                    cursor.execute('''
+                        SELECT * FROM resources 
+                        WHERE title LIKE ? OR knowledge_point LIKE ?
+                    ''', ('%数据分析%', '%数据分析%'))
+                    data_analysis_resources = cursor.fetchall()
+                    for res in data_analysis_resources:
+                        if res not in resources:
+                            resources.append(res)
+                            if len(resources) >= limit * 5:
+                                break
+                # 对于机器学习，直接查询knowledge_point为机器学习的资源
+                elif topic_name == '机器学习':
+                    # 尝试获取所有机器学习相关资源（不限制难度）
+                    cursor.execute('''
+                        SELECT * FROM resources 
+                        WHERE knowledge_point = ?
+                        LIMIT ?
+                    ''', (topic_name, limit * 10))
+                    resources = cursor.fetchall()
+                    
+                    # 如果还是没有，尝试获取所有包含机器学习的资源
+                    if not resources:
+                        cursor.execute('''
+                            SELECT * FROM resources 
+                            WHERE (knowledge_point LIKE ? OR title LIKE ?)
+                            LIMIT ?
+                        ''', ('%' + topic_name + '%', '%' + topic_name + '%', limit * 10))
+                        resources = cursor.fetchall()
+                    
+                    # 强制添加一些机器学习相关的资源，确保至少有3个资源
+                    cursor.execute('''
+                        SELECT * FROM resources 
+                        WHERE title LIKE ? OR knowledge_point LIKE ?
+                    ''', ('%机器学习%', '%机器学习%'))
+                    machine_learning_resources = cursor.fetchall()
+                    for res in machine_learning_resources:
                         if res not in resources:
                             resources.append(res)
                             if len(resources) >= limit * 5:
@@ -701,17 +900,31 @@ class PathPlanner:
                         exclude_conditions.extend(['knowledge_point NOT LIKE ?', 'description NOT LIKE ?', 'title NOT LIKE ?'])
                         exclude_params.extend(['%' + unrelated + '%', '%' + unrelated + '%', '%' + unrelated + '%'])
                     
-                    # 构建查询语句
-                    query = '''
-                        SELECT * FROM resources 
-                        WHERE (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?)
-                        AND (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?)
-                        AND ''' + ' AND '.join(exclude_conditions) + '''
-                        LIMIT ?
-                    '''
-                    
-                    # 构建参数（不限制难度）
-                    params = ['%' + original_topic + '%', '%' + original_topic + '%', '%' + original_topic + '%', '%编程%', '%代码%', '%编程%'] + exclude_params + [limit * 3]
+                    # 对于Python主题，只查询包含Python的资源
+                    if original_topic == 'Python':
+                        # 构建查询语句
+                        query = '''
+                            SELECT * FROM resources 
+                            WHERE (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?)
+                            AND ''' + ' AND '.join(exclude_conditions) + '''
+                            LIMIT ?
+                        '''
+                        
+                        # 构建参数（不限制难度）
+                        params = ['%' + original_topic + '%', '%' + original_topic + '%', '%' + original_topic + '%'] + exclude_params + [limit * 3]
+                    else:
+                        # 对于其他编程相关主题，查询包含主题和编程/代码的资源
+                        # 构建查询语句
+                        query = '''
+                            SELECT * FROM resources 
+                            WHERE (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?)
+                            AND (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?)
+                            AND ''' + ' AND '.join(exclude_conditions) + '''
+                            LIMIT ?
+                        '''
+                        
+                        # 构建参数（不限制难度）
+                        params = ['%' + original_topic + '%', '%' + original_topic + '%', '%' + original_topic + '%', '%编程%', '%代码%', '%编程%'] + exclude_params + [limit * 3]
                     cursor.execute(query, params)
                 else:
                     # 否则，获取与原始主题相关的资源
@@ -790,19 +1003,24 @@ class PathPlanner:
                 else:
                     other_resources.append(res)
             
-            # 对Python资源进行排序，优先推荐Python基础教程
+            # 对Python资源进行排序，优先推荐学习成本低、适合初学者的资源
             if level == '初级':
-                # 优先推荐包含"基础"、"入门"等关键词的资源
-                basic_resources = []
-                advanced_resources = []
-                for res in python_resources:
+                # 定义资源评分函数，考虑以下因素：
+                # 1. 是否包含基础关键词（权重2）
+                # 2. 是否是课程形式（通常更系统，权重1）
+                def score_resource(res):
+                    score = 0
                     title_lower = (res[1] or '').lower()
+                    # 基础关键词加分
                     if '基础' in title_lower or '入门' in title_lower or 'tutorial' in title_lower:
-                        basic_resources.append(res)
-                    else:
-                        advanced_resources.append(res)
-                # 优先使用基础资源
-                python_resources = basic_resources + advanced_resources
+                        score += 2
+                    # 课程形式加分
+                    if '课程' in title_lower or '教程' in title_lower:
+                        score += 1
+                    return score
+                
+                # 按评分排序
+                python_resources.sort(key=score_resource, reverse=True)
             
             # 优先使用Python相关资源
             filtered_resources = python_resources + other_resources
@@ -813,19 +1031,41 @@ class PathPlanner:
             # 提取主题名称（去除难度级别部分）
             topic_name = topic.split(' ')[0].split('(')[0]
             
+            # 定义资源评分函数，考虑学习成本和适合度
+            def score_resource(res):
+                score = 0
+                title_lower = (res[1] or '').lower()
+                resource_text = ''
+                for i in range(1, min(5, len(res))):
+                    if res[i]:
+                        resource_text += str(res[i]) + ' '
+                
+                # 基础关键词加分
+                if '基础' in title_lower or '入门' in title_lower or 'tutorial' in title_lower:
+                    score += 2
+                # 课程形式加分
+                if '课程' in title_lower or '教程' in title_lower:
+                    score += 1
+                # 与主题相关性加分
+                if topic_name in resource_text:
+                    score += 1
+                return score
+            
+            # 过滤并排序资源
+            candidate_resources = []
+            
             for res in resources:
                 if res[0] not in used_ids:
                     # 确保资源难度与当前级别匹配
                     if level:
-                        # 对于Java、C++等编程语言，忽略难度字段的限制（因为数据库中的难度字段是乱码）
-                        if topic_name not in ['Java', 'C++', 'JavaScript']:
-                            # 对于初级用户，只推荐初级资源
-                            if level == '初级' and res[4] != '初级':
-                                continue
-                            # 对于中级用户，推荐初级和中级资源
-                            elif level == '中级' and res[4] == '高级':
-                                continue
-                            # 对于高级用户，推荐所有级别资源
+                        # 对于所有主题，都要考虑难度字段的限制
+                        # 对于初级用户，只推荐初级资源
+                        if level == '初级' and res[4] != '初级':
+                            continue
+                        # 对于中级用户，推荐初级和中级资源
+                        elif level == '中级' and res[4] == '高级':
+                            continue
+                        # 对于高级用户，推荐所有级别资源
                     
                     # 检查资源是否与主题相关
                     resource_text = ''
@@ -846,29 +1086,75 @@ class PathPlanner:
                         # 只有包含编程相关关键词且不包含不相关关键词的资源才被推荐
                         if not has_programming_keyword or has_unrelated_keyword:
                             continue
+                    # 对于前端开发主题，只推荐与前端相关的资源
+                    elif topic_name == '前端开发':
+                        frontend_keywords = ['html', 'css', 'javascript', '前端', 'web', '网页', '浏览器', 'dom', 'js', '前端开发']
+                        has_frontend_keyword = any(keyword in resource_text.lower() for keyword in frontend_keywords)
+                        if not has_frontend_keyword:
+                            continue
+                    # 对于数据分析主题，只推荐与数据分析相关的资源
+                    elif topic_name == '数据分析':
+                        data_keywords = ['数据', '分析', '统计', 'excel', 'python', 'pandas', 'numpy', '数据处理', '数据可视化']
+                        has_data_keyword = any(keyword in resource_text.lower() for keyword in data_keywords)
+                        if not has_data_keyword:
+                            continue
                     
-                    filtered_resources.append(res)
-                    if len(filtered_resources) >= limit:
-                        break
+                    candidate_resources.append(res)
             
-            # 对于Java主题，如果资源数量不足，强制添加一些Java相关资源
-            if topic_name == 'Java' and len(filtered_resources) < limit:
-                # 再次查询所有Java相关资源
+            # 按评分排序
+            candidate_resources.sort(key=score_resource, reverse=True)
+            
+            # 限制数量
+            filtered_resources = candidate_resources[:limit]
+            
+            # 对于Java、算法、深度学习、数据分析和机器学习主题，如果资源数量不足，只添加与用户水平匹配的资源
+            if (topic_name in ['Java', '算法', '深度学习', '数据分析', '机器学习']) and len(filtered_resources) < limit:
+                # 再次查询所有相关资源
                 conn = sqlite3.connect('data/learning.db')
                 cursor = conn.cursor()
-                cursor.execute('''
-                    SELECT * FROM resources 
-                    WHERE knowledge_point = ?
-                ''', (topic_name,))
-                all_java_resources = cursor.fetchall()
+                # 对于算法、深度学习、数据分析和机器学习，使用LIKE查询以获取更多相关资源
+                if topic_name in ['算法', '深度学习', '数据分析', '机器学习']:
+                    # 考虑难度级别
+                    if level:
+                        cursor.execute('''
+                            SELECT * FROM resources 
+                            WHERE (knowledge_point LIKE ? OR title LIKE ?) AND difficulty = ?
+                        ''', ('%' + topic_name + '%', '%' + topic_name + '%', level))
+                    else:
+                        cursor.execute('''
+                            SELECT * FROM resources 
+                            WHERE knowledge_point LIKE ? OR title LIKE ?
+                        ''', ('%' + topic_name + '%', '%' + topic_name + '%'))
+                else:
+                    # 对于Java，使用精确匹配
+                    if level:
+                        cursor.execute('''
+                            SELECT * FROM resources 
+                            WHERE knowledge_point = ? AND difficulty = ?
+                        ''', (topic_name, level))
+                    else:
+                        cursor.execute('''
+                            SELECT * FROM resources 
+                            WHERE knowledge_point = ?
+                        ''', (topic_name,))
+                all_resources = cursor.fetchall()
                 conn.close()
                 
-                # 添加未使用的Java资源
-                for res in all_java_resources:
+                # 添加未使用的资源，只添加与用户水平匹配的
+                for res in all_resources:
                     if res[0] not in used_ids and res not in filtered_resources:
+                        # 确保资源难度与当前级别匹配
+                        if level:
+                            if level == '初级' and res[4] != '初级':
+                                continue
+                            elif level == '中级' and res[4] == '高级':
+                                continue
+                            # 高级用户可以使用所有级别资源
                         filtered_resources.append(res)
                         if len(filtered_resources) >= limit:
                             break
+                
+                # 不再强制填充到limit数量，只推荐与用户水平匹配的资源
         
         conn.close()
         return filtered_resources
@@ -988,9 +1274,13 @@ class PathPlanner:
         # 定义与编程相关的主题
         programming_topics = {'Python', 'Java', 'C++', '编程基础', '前端开发', 'JavaScript', 'Vue', 'React', 'Spring Boot', '系统编程', '算法', '数据结构'}
         
+        # 定义数学相关主题
+        math_topics = {'数学', '线性代数', '微积分', '概率论', '统计学'}
+        
         def dfs(topic, level):
             if topic in visited:
                 return
+            
             visited.add(topic)
             
             # 获取前置知识
@@ -1011,6 +1301,17 @@ class PathPlanner:
                         continue
                     
                     dfs(prereq, '初级')
+            
+            # 处理数学相关主题：如果已经添加了数学，就不再添加其分支主题
+            has_math = any(item[0] == '数学' for item in path)
+            if has_math and topic in math_topics and topic != '数学':
+                return
+            
+            # 特殊处理：如果路径中已经有数学，就不再添加统计学
+            if topic == '统计学':
+                has_math = any(item[0] == '数学' for item in path)
+                if has_math:
+                    return
             
             # 添加当前主题到路径
             path.append((topic, level))
@@ -1064,7 +1365,7 @@ class PathPlanner:
         
         return optimized_path
     
-    def generate_learning_plan(self, topic, level, goal, time_per_week=10):
+    def generate_learning_plan(self, topic, level, goal, time_budget=None, money_budget=None, time_per_week=10):
         """
         生成学习方案
         
@@ -1072,6 +1373,8 @@ class PathPlanner:
             topic: 学习主题
             level: 当前水平
             goal: 学习目标
+            time_budget: 时间预算（小时）
+            money_budget: 金钱预算（元）
             time_per_week: 每周学习时间（小时）
             
         Returns:
@@ -1089,6 +1392,8 @@ class PathPlanner:
             'level': level,
             'goal': goal,
             'time_per_week': time_per_week,
+            'time_budget': time_budget,
+            'money_budget': money_budget,
             'total_time': 0,
             'total_weeks': 0,
             'stages': []
@@ -1097,11 +1402,41 @@ class PathPlanner:
         total_time = 0
         used_resource_ids = set()  # 用于跟踪已使用的资源ID，避免重复推荐
         
+        # 计算每个阶段的学习时间，以便根据时间预算调整路径
+        stage_times = []
+        for stage_topic, stage_level in optimized_path:
+            learning_time = self._get_learning_time(stage_topic, stage_level)
+            stage_times.append((stage_topic, stage_level, learning_time))
+        
+        # 根据时间预算调整学习路径
+        if time_budget:
+            # 按重要性排序，核心技能优先
+            core_topics = ['Python', 'Java', 'C++', '前端开发', '数据分析', '机器学习']
+            stage_times.sort(key=lambda x: x[0] in core_topics, reverse=True)
+            
+            # 选择不超过时间预算的阶段
+            selected_stages = []
+            remaining_time = time_budget
+            for stage_topic, stage_level, learning_time in stage_times:
+                if remaining_time >= learning_time:
+                    selected_stages.append((stage_topic, stage_level))
+                    remaining_time -= learning_time
+                else:
+                    # 如果时间不够，只选择核心主题
+                    if stage_topic in core_topics:
+                        selected_stages.append((stage_topic, stage_level))
+                        break
+            
+            # 重新排序，确保编程基础在最前面
+            programming_basics = [s for s in selected_stages if '编程基础' in s[0]]
+            other_stages = [s for s in selected_stages if s not in programming_basics]
+            optimized_path = programming_basics + other_stages
+        
         for i, (stage_topic, stage_level) in enumerate(optimized_path):
-            # 获取资源，传递原始主题、已使用的资源ID和学习目标
+            # 获取资源，传递当前阶段的主题、已使用的资源ID、学习目标和金钱预算
             filtered_resources = self._get_resources_by_topic(
-                stage_topic, stage_level, original_topic=topic, 
-                used_resource_ids=used_resource_ids, limit=3, goal=goal
+                stage_topic, stage_level, original_topic=stage_topic, 
+                used_resource_ids=used_resource_ids, limit=3, goal=goal, money_budget=money_budget
             )
             
             # 记录使用的资源ID
@@ -1112,8 +1447,8 @@ class PathPlanner:
             if not filtered_resources:
                 # 尝试获取更多资源，不传递used_resource_ids，以获取所有可能的资源
                 more_resources = self._get_resources_by_topic(
-                    stage_topic, stage_level, original_topic=topic, 
-                    limit=5, goal=goal
+                    stage_topic, stage_level, original_topic=stage_topic, 
+                    limit=5, goal=goal, money_budget=money_budget
                 )
                 # 手动过滤已使用的资源
                 new_resources = []
@@ -1125,12 +1460,28 @@ class PathPlanner:
                         break
                 filtered_resources = new_resources
             
-            # 估算学习时间
-            learning_time = self._get_learning_time(stage_topic, stage_level)
+            # 重新初始化随机数生成器的种子值，确保每次生成的学习时间都不同
+            random.seed()
+            
+            # 根据资源的难度为每个资源生成随机学习时间
+            learning_time = 0
+            for res in filtered_resources:
+                # 获取资源难度
+                difficulty = res[4] if len(res) >= 5 else '初级'
+                # 根据难度生成随机学习时间
+                if difficulty == '初级':
+                    resource_time = random.randint(40, 60)
+                elif difficulty == '中级':
+                    resource_time = random.randint(60, 80)
+                elif difficulty == '高级':
+                    resource_time = random.randint(80, 100)
+                else:
+                    resource_time = 50
+                learning_time += resource_time
             total_time += learning_time
             
-            # 计算需要的周数
-            weeks_needed = max(1, int(learning_time / time_per_week))
+            # 计算需要的周数，保留小数点后一位
+            weeks_needed = max(0.1, round(learning_time / time_per_week, 1))
             
             stage = {
                 'stage': i + 1,
@@ -1154,7 +1505,7 @@ class PathPlanner:
         
         # 计算总时间和总周数
         plan['total_time'] = total_time
-        plan['total_weeks'] = max(1, int(total_time / time_per_week))
+        plan['total_weeks'] = max(0.1, round(total_time / time_per_week, 1))
         
         return plan
     

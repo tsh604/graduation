@@ -8,6 +8,7 @@ def init_database():
     os.makedirs('data', exist_ok=True)
     
     conn = sqlite3.connect('data/learning.db')
+    conn.text_factory = str
     cursor = conn.cursor()
      
     # 创建学习资源表
@@ -39,7 +40,7 @@ def init_database():
     count = cursor.fetchone()[0]
     
     if count == 0:
-        print("📦 首次运行，插入150条学习资源...")
+        print("首次运行，插入150条学习资源...")
         
         # ===== 150条真实有效的学习资源 =====
         sample_resources = [
@@ -196,7 +197,19 @@ def init_database():
             ('Ansible文档', '课程', '运维', '中级', 'https://docs.ansible.com/', '自动化运维'),
             ('Prometheus监控', '视频', '运维', '高级', 'https://prometheus.io/docs/', '监控系统'),
             
-            # ===== 10. 开发工具 (15条) =====
+            # ===== 10. 数学基础 (10条) =====
+            ('线性代数入门', '视频', '线性代数', '初级', 'https://www.khanacademy.org/math/linear-algebra', 'Khan Academy线性代数课程'),
+            ('线性代数基础', '课程', '线性代数', '初级', 'https://www.coursera.org/learn/linear-algebra-machine-learning', '机器学习中的线性代数'),
+            ('微积分入门', '视频', '微积分', '初级', 'https://www.khanacademy.org/math/calculus-1', 'Khan Academy微积分课程'),
+            ('微积分基础', '课程', '微积分', '初级', 'https://www.coursera.org/learn/calculus-1', 'Coursera微积分课程'),
+            ('统计学基础', '视频', '统计学', '初级', 'https://www.khanacademy.org/math/statistics-probability', 'Khan Academy统计学课程'),
+            ('概率论基础', '课程', '概率论', '初级', 'https://www.coursera.org/learn/probability-intro', 'Coursera概率论课程'),
+            ('数学分析基础', '书籍', '数学', '初级', 'https://book.douban.com/subject/26899182/', '数学分析入门'),
+            ('离散数学', '课程', '数学', '中级', 'https://www.coursera.org/learn/discrete-mathematics', '离散数学基础'),
+            ('数论基础', '文章', '数学', '中级', 'https://www.geeksforgeeks.org/number-theory-basics/', '数论入门'),
+            ('数学建模', '课程', '数学', '中级', 'https://www.coursera.org/learn/mathematical-modeling', '数学建模基础'),
+            
+            # ===== 11. 开发工具 (15条) =====
             ('VS Code文档', '文章', '工具', '初级', 'https://code.visualstudio.com/docs', '编辑器'),
             ('Postman文档', '视频', '工具', '中级', 'https://learning.postman.com/docs/', 'API测试'),
             ('Git官方文档', '课程', '工具', '初级', 'https://git-scm.com/doc', '版本控制'),
@@ -285,21 +298,22 @@ def get_all_topics():
 
 def reset_database():
     """彻底重置数据库（删除后重建）"""
-    print("⚠️  警告：此操作将删除所有数据！")
-    confirm = input("是否继续？(y/n): ")
+    print("警告：此操作将删除所有数据！")
+    # 自动确认重置
+    confirm = 'y'
     
     if confirm.lower() == 'y':
         # 删除数据库文件
         db_path = 'data/learning.db'
         if os.path.exists(db_path):
             os.remove(db_path)
-            print(f"✅ 已删除 {db_path}")
+            print(f"已删除 {db_path}")
         
         # 重新初始化
         init_database()
-        print("🎉 数据库重置完成！")
+        print("数据库重置完成！")
     else:
-        print("❌ 操作已取消")
+        print("操作已取消")
 
 
 def clear_user_dialogues():
@@ -325,7 +339,7 @@ if __name__ == '__main__':
         
         # 测试查询
         print("\n" + "="*50)
-        print("🔍 测试查询功能")
+        print("测试查询功能")
         print("="*50)
         
         print("\n=== Python相关资源 ===")

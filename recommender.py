@@ -84,7 +84,7 @@ class Recommender:
             "c++": "C++",
             "c语言": "C语言",
             "c#": "C#",
-            "前端": "前端开发",
+            "前端": "前端",
             "后端": "后端开发",
             "机器学习": "机器学习",
             "数据分析": "数据分析",
@@ -98,7 +98,8 @@ class Recommender:
             "git": "Git",
             "android": "Android",
             "ios": "iOS",
-            "运维": "运维"
+            "运维": "运维",
+            "工具": "工具"
         }
         
         text_lower = text.lower()
@@ -119,13 +120,17 @@ class Recommender:
         # 如果没有提取到知识点，尝试从输入中直接获取
         if not knowledge_points:
             common_tech = ["c++", "c语言", "java", "python", "javascript", "html", "css", 
-                          "前端", "后端", "数据库", "机器学习", "数据分析", "android", "ios"]
+                          "前端", "后端", "数据库", "机器学习", "数据分析", "android", "ios", "工具"]
             for tech in common_tech:
                 if tech in user_input.lower():
                     if tech == "c++":
                         knowledge_points = ["C++"]
                     elif tech == "c语言":
                         knowledge_points = ["C语言"]
+                    elif tech == "前端":
+                        knowledge_points = ["前端"]
+                    elif tech == "工具":
+                        knowledge_points = ["工具"]
                     else:
                         knowledge_points = [tech.capitalize()]
                     break

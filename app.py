@@ -64,11 +64,13 @@ class DialogueManager:
         """获取对话状态"""
         if session_id not in dialogue_state:
             dialogue_state[session_id] = {
-                'stage': 'initial',  # initial, asking_topic, asking_level, asking_goal, recommending
+                'stage': 'initial',  # initial, asking_topic, asking_level, asking_goal, asking_time_budget, asking_money_budget, recommending
                 'context': {
                     'topic': None,      # 学习主题
                     'level': None,      # 难度级别
                     'goal': None,       # 学习目标
+                    'time_budget': None, # 时间预算（小时）
+                    'money_budget': None, # 金钱预算（元）
                 },
                 'history': []
             }
@@ -114,6 +116,8 @@ class DialogueManager:
             "后端": "后端开发",
             "机器学习": "机器学习",
             "数据分析": "数据分析",
+            "深度学习": "深度学习",
+            "算法": "算法",
             "vue": "Vue",
             "react": "React",
             "数据库": "数据库",
@@ -138,6 +142,8 @@ class DialogueManager:
             "后端": "后端开发",
             "机器学习": "机器学习",
             "数据分析": "数据分析",
+            "深度学习": "深度学习",
+            "算法": "算法",
             "vue": "Vue",
             "react": "React",
             "数据库": "数据库",
@@ -184,6 +190,14 @@ class DialogueManager:
         """提取难度级别 - 增强版"""
         message_lower = message.lower()
         
+        # 直接匹配难度级别
+        if "初级" in message_lower:
+            return "初级"
+        elif "中级" in message_lower:
+            return "中级"
+        elif "高级" in message_lower:
+            return "高级"
+        
         # 初级水平关键词
         beginner_words = [
             "零", "0", "入门", "初学者", "小白", "没学过", "从零", 
@@ -193,7 +207,7 @@ class DialogueManager:
         
         # 中级水平关键词
         intermediate_words = [
-            "有基础", "学过", "了解", "中级", "会一点", "有一点",
+            "有基础", "学过", "了解", "会一点", "有一点",
             "有一点基础", "有经验", "用过", "熟悉", "intermediate",
             "有一定基础", "有些经验", "不是零基础", "接触过",
             "有一点经验", "会一些", "知道一些"
@@ -201,7 +215,7 @@ class DialogueManager:
         
         # 高级水平关键词
         advanced_words = [
-            "高级", "深入", "专家", "精通", "熟练", "advanced",
+            "深入", "专家", "精通", "熟练", "advanced",
             "多年经验", "资深", "professional", "expert", "大神"
         ]
         
@@ -232,8 +246,18 @@ class DialogueManager:
         """提取学习目标"""
         message_lower = message.lower()
         
+        # 直接匹配学习目标
+        if "找工作" in message_lower:
+            return "找工作"
+        elif "兴趣学习" in message_lower:
+            return "兴趣学习"
+        elif "项目开发" in message_lower:
+            return "项目开发"
+        elif "考取证书" in message_lower:
+            return "考取证书"
+        
         # 找工作相关
-        if any(word in message_lower for word in ["工作", "就业", "offer", "求职", "面试", "找工作", "转行"]):
+        if any(word in message_lower for word in ["工作", "就业", "offer", "求职", "面试", "转行"]):
             return "找工作"
         
         # 兴趣学习相关
@@ -336,16 +360,24 @@ class DialogueManager:
         topic = context.get('topic', '编程')
         level = context.get('level', '初级')
         goal = context.get('goal', '学习')
+        time_budget = context.get('time_budget', None)
+        money_budget = context.get('money_budget', None)
+        daily_time = context.get('daily_time', 2)  # 默认每天学习2小时
+        time_per_week = daily_time * 7  # 每周学习时间 = 每天学习时间 × 7天
         
         # 生成学习方案
         try:
-            plan = generate_learning_plan(topic, level, goal)
+            plan = generate_learning_plan(topic, level, goal, time_budget=time_budget, money_budget=money_budget, time_per_week=time_per_week)
             
             # 构建回复
             response = f"根据你的{level}水平和{goal}的目标，我为你制定了以下学习方案：\n\n"
             response += f"🎯 学习目标：{topic}\n"
             response += f"📊 当前水平：{level}\n"
             response += f"🎨 学习目的：{goal}\n"
+            if time_budget:
+                response += f"⏱️ 时间预算：{time_budget} 小时\n"
+            if money_budget:
+                response += f"💰 金钱预算：{money_budget} 元\n"
             response += f"⏱️ 总学习时间：{plan['total_time']} 小时\n"
             response += f"📅 预计需要：{plan['total_weeks']} 周\n"
             response += f"📚 每周建议学习：{plan['time_per_week']} 小时\n\n"
@@ -834,11 +866,93 @@ class DialogueManager:
             goal = DialogueManager._extract_goal(user_message)
             if goal:
                 context['goal'] = goal
-                state['stage'] = 'recommending'
-                # 进入推荐阶段
-                return DialogueManager._generate_recommendation(context)
+                state['stage'] = 'asking_time_budget'
+                return "你打算在多长时间内达到学习目的的水平？"
             else:
                 return "能告诉我你的学习目标吗？比如想找相关工作，还是纯兴趣学习？"
+        
+        elif stage == 'asking_time_budget':
+            # 提取时间预算，支持小时、天、月、年等单位
+            try:
+                message = user_message.strip().lower()
+                time_budget = 0
+                
+                if '小时' in message:
+                    # 处理小时单位
+                    time_str = message.replace('小时', '').strip()
+                    time_budget = float(time_str)
+                    if time_budget <= 0:
+                        return "请输入有效的学习时间"
+                elif '天' in message:
+                    # 处理天单位
+                    time_str = message.replace('天', '').strip()
+                    days = float(time_str)
+                    if days > 0 and days <= 365:
+                        # 直接转换为小时
+                        time_budget = days * 24
+                elif '月' in message:
+                    # 处理月单位
+                    time_str = message.replace('个月', '').replace('月', '').strip()
+                    months = float(time_str)
+                    if months > 0 and months <= 12:
+                        # 转换为小时（每月按28天，每天24小时计算）
+                        time_budget = months * 28 * 24
+                elif '年' in message:
+                    # 处理年单位
+                    time_str = message.replace('年', '').strip()
+                    years = float(time_str)
+                    if years > 0 and years <= 5:
+                        # 转换为小时（每年按365天，每天24小时计算）
+                        time_budget = years * 365 * 24
+                else:
+                    # 尝试直接解析为数字（默认小时）
+                    time_budget = float(message)
+                    if time_budget <= 0:
+                        return "请输入有效的学习时间"
+                
+                # 检查时间预算是否有效
+                if time_budget > 0:
+                    context['time_budget'] = time_budget
+                    state['stage'] = 'asking_money_budget'
+                    return "你学习所消耗的金钱预算是多少？"
+                else:
+                    return "请输入有效的学习时间"
+            except ValueError:
+                return "请输入有效的学习时间"
+        
+        elif stage == 'asking_money_budget':
+            # 提取金钱预算，支持带有"元"字的输入
+            try:
+                message = user_message.strip().lower()
+                # 移除"元"字
+                money_str = message.replace('元', '').strip()
+                money_budget = float(money_str)
+                if money_budget >= 0:
+                    context['money_budget'] = money_budget
+                    state['stage'] = 'asking_daily_time'
+                    return "你每天打算学习多长时间？"
+                else:
+                    return "请输入有效的金钱预算"
+            except ValueError:
+                return "请输入有效的金钱预算"
+        elif stage == 'asking_daily_time':
+            # 提取每天学习时间
+            try:
+                message = user_message.strip().lower()
+                if '小时' in message:
+                    time_str = message.replace('小时', '').strip()
+                    daily_time = float(time_str)
+                else:
+                    daily_time = float(message)
+                if daily_time > 0 and daily_time <= 12:
+                    context['daily_time'] = daily_time
+                    state['stage'] = 'recommending'
+                    # 进入推荐阶段
+                    return DialogueManager._generate_recommendation(context)
+                else:
+                    return "请输入有效的每天学习时间"
+            except ValueError:
+                return "请输入有效的每天学习时间"
         
         elif stage == 'recommending':
             # 检查是否是解释类问题
