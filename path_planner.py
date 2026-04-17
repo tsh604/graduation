@@ -11,7 +11,7 @@ class PathPlanner:
         self.db_path = db_path
         self.kg = knowledge_graph
     
-    def _get_resources_by_topic(self, topic, level=None, limit=3, original_topic=None, used_resource_ids=None, goal=None, money_budget=None):
+    def _get_resources_by_topic(self, topic, level=None, limit=3, original_topic=None, used_resource_ids=None, goal=None, money_budget=None, time_budget=None):
         """根据主题和难度获取资源
         
         Args:
@@ -129,7 +129,7 @@ class PathPlanner:
                     # 兴趣学习目标：优先添加趣味性强的Python资源
                     # 1. Python 100天教程
                     cursor.execute('''
-                        SELECT *, learning_time FROM resources 
+                        SELECT * FROM resources 
                         WHERE title LIKE ? AND difficulty = ?
                     ''', ('%100天%', level))
                     python100 = cursor.fetchone()
@@ -152,7 +152,7 @@ class PathPlanner:
                     # 项目开发目标：优先添加与项目开发相关的Python资源
                     # 1. Jupyter教程
                     cursor.execute('''
-                        SELECT *, learning_time FROM resources 
+                        SELECT * FROM resources 
                         WHERE title LIKE ? AND difficulty = ?
                     ''', ('%Jupyter%', level))
                     jupyter = cursor.fetchone()
@@ -163,7 +163,7 @@ class PathPlanner:
                     
                     # 2. PyCharm指南
                     cursor.execute('''
-                        SELECT *, learning_time FROM resources 
+                        SELECT * FROM resources 
                         WHERE title LIKE ? AND difficulty = ?
                     ''', ('%PyCharm%', level))
                     pycharm = cursor.fetchone()
@@ -178,7 +178,7 @@ class PathPlanner:
                     if goal == '找工作':
                         # 找工作目标：优先包含"面试"、"就业"、"项目"等关键词的资源
                         cursor.execute('''
-                            SELECT *, learning_time FROM resources 
+                            SELECT * FROM resources 
                             WHERE (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?)
                             AND title NOT LIKE ?
                             AND (title LIKE ? OR description LIKE ? OR knowledge_point LIKE ?)
@@ -187,7 +187,7 @@ class PathPlanner:
                     elif goal == '兴趣学习':
                         # 兴趣学习目标：优先包含"趣味"、"入门"、"实践"等关键词的资源
                         cursor.execute('''
-                            SELECT *, learning_time FROM resources 
+                            SELECT * FROM resources 
                             WHERE (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?)
                             AND title NOT LIKE ?
                             AND (title LIKE ? OR description LIKE ? OR knowledge_point LIKE ?)
@@ -196,7 +196,7 @@ class PathPlanner:
                     elif goal == '项目开发':
                         # 项目开发目标：优先包含"项目"、"实战"、"开发"等关键词的资源
                         cursor.execute('''
-                            SELECT *, learning_time FROM resources 
+                            SELECT * FROM resources 
                             WHERE (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?)
                             AND title NOT LIKE ?
                             AND (title LIKE ? OR description LIKE ? OR knowledge_point LIKE ?)
@@ -205,7 +205,7 @@ class PathPlanner:
                     else:
                         # 其他目标：使用基本查询
                         cursor.execute('''
-                            SELECT *, learning_time FROM resources 
+                            SELECT * FROM resources 
                             WHERE (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?)
                             AND title NOT LIKE ?
                             LIMIT ?
@@ -217,7 +217,7 @@ class PathPlanner:
                 # 如果还是没有足够的资源，获取所有Python资源
                 if not resources or len(resources) < limit:
                     cursor.execute('''
-                        SELECT *, learning_time FROM resources 
+                        SELECT * FROM resources 
                         WHERE (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?)
                         AND title NOT LIKE ?
                         LIMIT ?
@@ -228,7 +228,7 @@ class PathPlanner:
             else:
                 # 基础SQL查询
                 base_query = '''
-                    SELECT *, learning_time FROM resources 
+                    SELECT * FROM resources 
                     WHERE (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?) 
                     AND difficulty = ?
                 '''
@@ -264,7 +264,7 @@ class PathPlanner:
         else:
             # 没有指定难度级别时的查询
             cursor.execute('''
-                SELECT *, learning_time FROM resources 
+                SELECT * FROM resources 
                 WHERE knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?
                 LIMIT ?
             ''', ('%' + topic + '%', '%' + topic + '%', '%' + topic + '%', limit * 3))  # 获取更多资源以便过滤
@@ -281,7 +281,7 @@ class PathPlanner:
                 if goal == '找工作':
                     # 找工作目标：优先包含"面试"、"就业"、"项目"等关键词的资源
                     cursor.execute('''
-                        SELECT *, learning_time FROM resources 
+                        SELECT * FROM resources 
                         WHERE difficulty = ? 
                         AND (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?)
                         AND NOT (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?)
@@ -292,7 +292,7 @@ class PathPlanner:
                 elif goal == '兴趣学习':
                     # 兴趣学习目标：优先包含"趣味"、"入门"、"实践"等关键词的资源
                     cursor.execute('''
-                        SELECT *, learning_time FROM resources 
+                        SELECT * FROM resources 
                         WHERE difficulty = ? 
                         AND (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?)
                         AND NOT (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?)
@@ -303,7 +303,7 @@ class PathPlanner:
                 elif goal == '项目开发':
                     # 项目开发目标：优先包含"项目"、"实战"、"开发"等关键词的资源
                     cursor.execute('''
-                        SELECT *, learning_time FROM resources 
+                        SELECT * FROM resources 
                         WHERE difficulty = ? 
                         AND (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?)
                         AND NOT (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?)
@@ -314,7 +314,7 @@ class PathPlanner:
                 else:
                     # 其他目标：使用基本查询
                     cursor.execute('''
-                        SELECT *, learning_time FROM resources 
+                        SELECT * FROM resources 
                         WHERE difficulty = ? 
                         AND (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?)
                         AND NOT (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?)
@@ -326,7 +326,7 @@ class PathPlanner:
                 # 如果还是没有，再尝试获取通用编程资源
                 if not resources:
                     cursor.execute('''
-                        SELECT *, learning_time FROM resources 
+                        SELECT * FROM resources 
                         WHERE difficulty = ? 
                         AND (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?)
                         AND NOT (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?)
@@ -339,7 +339,7 @@ class PathPlanner:
                 if not resources:
                     # 获取前端相关资源
                     cursor.execute('''
-                        SELECT *, learning_time FROM resources 
+                        SELECT * FROM resources 
                         WHERE difficulty = ? 
                         AND (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?)
                         AND NOT (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?)
@@ -351,7 +351,7 @@ class PathPlanner:
                 # 如果还是没有，尝试获取Linux相关资源
                 if not resources:
                     cursor.execute('''
-                        SELECT *, learning_time FROM resources 
+                        SELECT * FROM resources 
                         WHERE difficulty = ? 
                         AND (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?)
                         AND NOT (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?)
@@ -363,7 +363,7 @@ class PathPlanner:
                 # 如果还是没有，尝试获取Git相关资源
                 if not resources:
                     cursor.execute('''
-                        SELECT *, learning_time FROM resources 
+                        SELECT * FROM resources 
                         WHERE difficulty = ? 
                         AND (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?)
                         AND NOT (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?)
@@ -375,7 +375,7 @@ class PathPlanner:
                 # 如果还是没有，尝试获取算法相关资源
                 if not resources:
                     cursor.execute('''
-                        SELECT *, learning_time FROM resources 
+                        SELECT * FROM resources 
                         WHERE difficulty = ? 
                         AND (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?)
                         AND NOT (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?)
@@ -387,7 +387,7 @@ class PathPlanner:
                 # 如果还是没有，尝试获取数据库相关资源
                 if not resources:
                     cursor.execute('''
-                        SELECT *, learning_time FROM resources 
+                        SELECT * FROM resources 
                         WHERE difficulty = ? 
                         AND (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?)
                         AND NOT (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?)
@@ -1008,24 +1008,154 @@ class PathPlanner:
                 # 定义资源评分函数，考虑以下因素：
                 # 1. 是否包含基础关键词（权重2）
                 # 2. 是否是课程形式（通常更系统，权重1）
+                # 3. 学习时间成本（权重1，时间越合理得分越高）
+                # 4. 与主题相关性（权重1）
                 def score_resource(res):
                     score = 0
                     title_lower = (res[1] or '').lower()
+                    resource_text = ''
+                    for i in range(1, min(5, len(res))):
+                        if res[i]:
+                            resource_text += str(res[i]) + ' '
                     # 基础关键词加分
                     if '基础' in title_lower or '入门' in title_lower or 'tutorial' in title_lower:
                         score += 2
                     # 课程形式加分
                     if '课程' in title_lower or '教程' in title_lower:
                         score += 1
+                    # 与主题相关性加分
+                    if 'Python' in resource_text:
+                        score += 1
+                    # 学习时间成本加分
+                    # 尝试获取资源的学习时间
+                    learning_time = None
+                    if len(res) > 6 and res[6]:
+                        try:
+                            learning_time = float(res[6])
+                        except (ValueError, TypeError):
+                            pass
+                    # 如果有学习时间，根据时间合理性加分
+                    if learning_time:
+                        # 初级资源的合理学习时间范围是20-50小时
+                        if 20 <= learning_time <= 50:
+                            score += 1
+                        # 时间过长或过短都会影响得分
+                        elif learning_time < 20:
+                            score += 0.5  # 时间过短，可能内容不完整
+                        elif learning_time > 50:
+                            score += 0.5  # 时间过长，可能超出初学者能力
                     return score
                 
                 # 按评分排序
                 python_resources.sort(key=score_resource, reverse=True)
             
             # 优先使用Python相关资源
-            filtered_resources = python_resources + other_resources
-            # 限制数量
-            filtered_resources = filtered_resources[:limit]
+            candidate_resources = python_resources + other_resources
+            
+            # 综合考虑学习时间和金钱成本，选择最优的3个资源
+            # 对于所有目标，我们需要选择对用户损失最小的资源组合
+            # 对资源进行去重处理
+            seen_resource_ids = set()
+            unique_resources = []
+            for resource in candidate_resources:
+                resource_id = resource[0]
+                if resource_id not in seen_resource_ids:
+                    seen_resource_ids.add(resource_id)
+                    unique_resources.append(resource)
+            
+            # 计算每个资源的成本得分，并保存详细信息
+            resources_with_cost = []
+            for resource in unique_resources:
+                # 计算详细成本信息
+                learning_time = None
+                # 尝试获取learning_time，根据资源元组的实际结构
+                # 首先尝试索引7（learning_time在索引7的位置）
+                if len(resource) > 7 and resource[7]:
+                    try:
+                        learning_time = float(resource[7])
+                    except (ValueError, TypeError):
+                        pass
+                # 如果索引7失败，尝试索引6
+                if learning_time is None and len(resource) > 6 and resource[6]:
+                    try:
+                        learning_time = float(resource[6])
+                    except (ValueError, TypeError):
+                        pass
+                # 如果索引6失败，尝试索引8
+                if learning_time is None and len(resource) > 8 and resource[8]:
+                    try:
+                        learning_time = float(resource[8])
+                    except (ValueError, TypeError):
+                        pass
+                
+                # 为每个资源生成一个50-100之间的随机价格
+                import random
+                price = random.randint(50, 100)
+                
+                # 更新resource表中的price字段
+                conn = sqlite3.connect(self.db_path)
+                cursor = conn.cursor()
+                cursor.execute('''
+                    UPDATE resources SET price = ? WHERE id = ?
+                ''', (price, resource[0]))
+                conn.commit()
+                conn.close()
+                
+                # 暂时不计算帮助得分
+                help_score = 0
+                
+                # 计算时间成本和金钱成本
+                # 时间成本：基于用户的时间预算，计算资源学习时间占总时间预算的比例
+                time_cost = (learning_time / time_budget * 100) if learning_time and time_budget else 0
+                # 金钱成本：基于用户的金钱预算，计算资源价格占总金钱预算的比例
+                money_cost = (price / money_budget * 100) if price and money_budget else 0
+                
+                # 计算总成本得分（重新设计的得分方式）
+                # 新的得分方式：
+                # 1. 时间成本：基于用户的时间预算，计算资源学习时间占总时间预算的比例
+                # 2. 金钱成本：基于用户的金钱预算，计算资源价格占总金钱预算的比例
+                # 3. 帮助得分：基于资源对学习目标的帮助程度
+                # 4. 综合得分：(时间成本 * 0.6 + 金钱成本 * 0.4) - help_score
+                # 得分越低越好
+                total_score = (time_cost * 0.6 + money_cost * 0.4) - help_score
+                
+                # 保留两位小数
+                total_score = round(total_score, 2)
+                time_cost = round(time_cost, 2)
+                money_cost = round(money_cost, 2)
+                help_score = round(help_score, 2)
+                
+                resources_with_cost.append((resource, total_score, time_cost, money_cost, help_score))
+            
+            # 按成本得分排序（得分越低越好）
+            resources_with_cost.sort(key=lambda x: x[1])
+            # 选择成本最低的3个资源
+            filtered_resources = [resource for resource, score, time_cost, money_cost, help_score in resources_with_cost[:limit]]
+            
+            # 将得分信息插入到数据库
+            import uuid
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            
+            # 生成推荐ID
+            recommendation_id = str(uuid.uuid4())
+            
+            # 插入得分信息
+            for resource, score, time_cost, money_cost, help_score in resources_with_cost:
+                resource_id = resource[0]
+                resource_name = resource[1] if len(resource) >= 2 else 'Unknown'
+                # 格式化为两位小数
+                score_str = f"{score:.2f}"
+                time_cost_str = f"{time_cost:.2f}"
+                money_cost_str = f"{money_cost:.2f}"
+                help_score_str = f"{help_score:.2f}"
+                cursor.execute('''
+                    INSERT INTO recommendation_scores (recommendation_id, resource_id, resource_name, score, time_cost, money_cost, help_score)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                ''', (recommendation_id, resource_id, resource_name, score_str, time_cost_str, money_cost_str, help_score_str))
+            
+            conn.commit()
+            conn.close()
         else:
             # 对于非Python主题，使用原始逻辑
             # 提取主题名称（去除难度级别部分）
@@ -1049,6 +1179,41 @@ class PathPlanner:
                 # 与主题相关性加分
                 if topic_name in resource_text:
                     score += 1
+                # 学习时间成本加分
+                # 尝试获取资源的学习时间
+                learning_time = None
+                if len(res) > 6 and res[6]:
+                    try:
+                        learning_time = float(res[6])
+                    except (ValueError, TypeError):
+                        pass
+                # 如果有学习时间，根据时间合理性加分
+                if learning_time:
+                    # 根据难度级别设置合理的学习时间范围
+                    if level == '初级':
+                        # 初级资源的合理学习时间范围是20-50小时
+                        if 20 <= learning_time <= 50:
+                            score += 1
+                        elif learning_time < 20:
+                            score += 0.5  # 时间过短，可能内容不完整
+                        elif learning_time > 50:
+                            score += 0.5  # 时间过长，可能超出初学者能力
+                    elif level == '中级':
+                        # 中级资源的合理学习时间范围是40-70小时
+                        if 40 <= learning_time <= 70:
+                            score += 1
+                        elif learning_time < 40:
+                            score += 0.5
+                        elif learning_time > 70:
+                            score += 0.5
+                    elif level == '高级':
+                        # 高级资源的合理学习时间范围是60-100小时
+                        if 60 <= learning_time <= 100:
+                            score += 1
+                        elif learning_time < 60:
+                            score += 0.5
+                        elif learning_time > 100:
+                            score += 0.5
                 return score
             
             # 过滤并排序资源
@@ -1104,16 +1269,118 @@ class PathPlanner:
             # 按评分排序
             candidate_resources.sort(key=score_resource, reverse=True)
             
-            # 限制数量
-            filtered_resources = candidate_resources[:limit]
+            # 综合考虑学习时间和金钱成本，选择最优的3个资源
+            # 对于所有目标，我们需要选择对用户损失最小的资源组合
+            # 对资源进行去重处理
+            seen_resource_ids = set()
+            unique_resources = []
+            for resource in candidate_resources:
+                resource_id = resource[0]
+                if resource_id not in seen_resource_ids:
+                    seen_resource_ids.add(resource_id)
+                    unique_resources.append(resource)
+            
+            # 计算每个资源的成本得分，并保存详细信息
+            resources_with_cost = []
+            for resource in unique_resources:
+                # 计算详细成本信息
+                learning_time = None
+                # 尝试获取learning_time，根据资源元组的实际结构
+                # 首先尝试索引7（learning_time在索引7的位置）
+                if len(resource) > 7 and resource[7]:
+                    try:
+                        learning_time = float(resource[7])
+                    except (ValueError, TypeError):
+                        pass
+                # 如果索引7失败，尝试索引6
+                if learning_time is None and len(resource) > 6 and resource[6]:
+                    try:
+                        learning_time = float(resource[6])
+                    except (ValueError, TypeError):
+                        pass
+                # 如果索引6失败，尝试索引8
+                if learning_time is None and len(resource) > 8 and resource[8]:
+                    try:
+                        learning_time = float(resource[8])
+                    except (ValueError, TypeError):
+                        pass
+                
+                # 为每个资源生成一个50-100之间的随机价格
+                import random
+                price = random.randint(50, 100)
+                
+                # 更新resource表中的price字段
+                conn = sqlite3.connect(self.db_path)
+                cursor = conn.cursor()
+                cursor.execute('''
+                    UPDATE resources SET price = ? WHERE id = ?
+                ''', (price, resource[0]))
+                conn.commit()
+                conn.close()
+                
+                # 暂时不计算帮助得分
+                help_score = 0
+                
+                # 计算时间成本和金钱成本
+                # 时间成本：基于用户的时间预算，计算资源学习时间占总时间预算的比例
+                time_cost = (learning_time / time_budget * 100) if learning_time and time_budget else 0
+                # 金钱成本：基于用户的金钱预算，计算资源价格占总金钱预算的比例
+                money_cost = (price / money_budget * 100) if price and money_budget else 0
+                
+                # 计算总成本得分（重新设计的得分方式）
+                # 新的得分方式：
+                # 1. 时间成本：基于用户的时间预算，计算资源学习时间占总时间预算的比例
+                # 2. 金钱成本：基于用户的金钱预算，计算资源价格占总金钱预算的比例
+                # 3. 帮助得分：基于资源对学习目标的帮助程度
+                # 4. 综合得分：(时间成本 * 0.6 + 金钱成本 * 0.4) - help_score
+                # 得分越低越好
+                total_score = (time_cost * 0.6 + money_cost * 0.4) - help_score
+                
+                # 保留两位小数
+                total_score = round(total_score, 2)
+                time_cost = round(time_cost, 2)
+                money_cost = round(money_cost, 2)
+                help_score = round(help_score, 2)
+                
+                resources_with_cost.append((resource, total_score, time_cost, money_cost, help_score))
+            
+            # 按成本得分排序（得分越低越好）
+            resources_with_cost.sort(key=lambda x: x[1])
+            # 选择成本最低的3个资源
+            filtered_resources = [resource for resource, score, time_cost, money_cost, help_score in resources_with_cost[:limit]]
+            
+            # 将得分信息插入到数据库
+            import uuid
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            
+            # 生成推荐ID
+            recommendation_id = str(uuid.uuid4())
+            
+            # 插入得分信息
+            for resource, score, time_cost, money_cost, help_score in resources_with_cost:
+                resource_id = resource[0]
+                resource_name = resource[1] if len(resource) >= 2 else 'Unknown'
+                # 格式化为两位小数
+                score_str = f"{score:.2f}"
+                time_cost_str = f"{time_cost:.2f}"
+                money_cost_str = f"{money_cost:.2f}"
+                help_score_str = f"{help_score:.2f}"
+                cursor.execute('''
+                    INSERT INTO recommendation_scores (recommendation_id, resource_id, resource_name, score, time_cost, money_cost, help_score)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                ''', (recommendation_id, resource_id, resource_name, score_str, time_cost_str, money_cost_str, help_score_str))
+            
+            conn.commit()
+            conn.close()
             
             # 对于Java、算法、深度学习、数据分析和机器学习主题，如果资源数量不足，只添加与用户水平匹配的资源
-            if (topic_name in ['Java', '算法', '深度学习', '数据分析', '机器学习']) and len(filtered_resources) < limit:
+            if (topic_name in ['Java', '算法', '深度学习', '数据分析', '机器学习', '编程基础']) and len(filtered_resources) < limit:
                 # 再次查询所有相关资源
                 conn = sqlite3.connect('data/learning.db')
                 cursor = conn.cursor()
                 # 对于算法、深度学习、数据分析和机器学习，使用LIKE查询以获取更多相关资源
-                if topic_name in ['算法', '深度学习', '数据分析', '机器学习']:
+                if topic_name in ['算法', '深度学习', '数据分析', '机器学习', '编程基础']:
                     # 考虑难度级别
                     if level:
                         cursor.execute('''
@@ -1141,6 +1408,7 @@ class PathPlanner:
                 conn.close()
                 
                 # 添加未使用的资源，只添加与用户水平匹配的
+                additional_resources = []
                 for res in all_resources:
                     if res[0] not in used_ids and res not in filtered_resources:
                         # 确保资源难度与当前级别匹配
@@ -1150,9 +1418,98 @@ class PathPlanner:
                             elif level == '中级' and res[4] == '高级':
                                 continue
                             # 高级用户可以使用所有级别资源
-                        filtered_resources.append(res)
-                        if len(filtered_resources) >= limit:
+                        additional_resources.append(res)
+                        if len(additional_resources) >= limit - len(filtered_resources):
                             break
+                
+                # 计算额外资源的成本得分并插入到数据库
+                if additional_resources:
+                    # 计算每个资源的成本得分
+                    additional_resources_with_cost = []
+                    for resource in additional_resources:
+                        # 计算详细成本信息
+                        learning_time = None
+                        # 尝试获取learning_time，根据资源元组的实际结构
+                        # 首先尝试索引7（learning_time在索引7的位置）
+                        if len(resource) > 7 and resource[7]:
+                            try:
+                                learning_time = float(resource[7])
+                            except (ValueError, TypeError):
+                                pass
+                        # 如果索引7失败，尝试索引6
+                        if learning_time is None and len(resource) > 6 and resource[6]:
+                            try:
+                                learning_time = float(resource[6])
+                            except (ValueError, TypeError):
+                                pass
+                        # 如果索引6失败，尝试索引8
+                        if learning_time is None and len(resource) > 8 and resource[8]:
+                            try:
+                                learning_time = float(resource[8])
+                            except (ValueError, TypeError):
+                                pass
+                        
+                        # 金钱成本暂时设为0，因为resources表中没有价格字段
+                        price = 0
+                        
+                        # 暂时不计算帮助得分
+                        help_score = 0
+                        
+                        # 计算时间成本和金钱成本
+                        # 时间成本：基于用户的时间预算，计算资源学习时间占总时间预算的比例
+                        time_cost = (learning_time / time_budget * 100) if learning_time and time_budget else 0
+                        # 金钱成本：基于用户的金钱预算，计算资源价格占总金钱预算的比例
+                        money_cost = (price / money_budget * 100) if price and money_budget else 0
+                        
+                        # 计算总成本得分（重新设计的得分方式）
+                        # 新的得分方式：
+                        # 1. 时间成本：基于用户的时间预算，计算资源学习时间占总时间预算的比例
+                        # 2. 金钱成本：基于用户的金钱预算，计算资源价格占总金钱预算的比例
+                        # 3. 帮助得分：基于资源对学习目标的帮助程度
+                        # 4. 综合得分：(时间成本 * 0.6 + 金钱成本 * 0.4) - help_score
+                        # 得分越低越好
+                        total_score = (time_cost * 0.6 + money_cost * 0.4) - help_score
+                        
+                        # 保留两位小数
+                        total_score = round(total_score, 2)
+                        time_cost = round(time_cost, 2)
+                        money_cost = round(money_cost, 2)
+                        help_score = round(help_score, 2)
+                        
+                        additional_resources_with_cost.append((resource, total_score, time_cost, money_cost, help_score))
+                    
+                    # 按成本得分排序（得分越低越好）
+                    additional_resources_with_cost.sort(key=lambda x: x[1])
+                    # 选择成本最低的资源
+                    selected_additional_resources = [resource for resource, score, time_cost, money_cost, help_score in additional_resources_with_cost[:limit - len(filtered_resources)]]
+                    
+                    # 将额外资源添加到过滤资源中
+                    filtered_resources.extend(selected_additional_resources)
+                    
+                    # 将得分信息插入到数据库
+                    import uuid
+                    conn = sqlite3.connect(self.db_path)
+                    cursor = conn.cursor()
+                    
+                    # 生成推荐ID
+                    recommendation_id = str(uuid.uuid4())
+                    
+                    # 插入得分信息
+                    for resource, score, time_cost, money_cost, help_score in additional_resources_with_cost:
+                        resource_id = resource[0]
+                        resource_name = resource[1] if len(resource) >= 2 else 'Unknown'
+                        # 格式化为两位小数
+                        score_str = f"{score:.2f}"
+                        time_cost_str = f"{time_cost:.2f}"
+                        money_cost_str = f"{money_cost:.2f}"
+                        help_score_str = f"{help_score:.2f}"
+                        cursor.execute('''
+                            INSERT INTO recommendation_scores (recommendation_id, resource_id, resource_name, score, time_cost, money_cost, help_score)
+                            VALUES (?, ?, ?, ?, ?, ?, ?)
+                        ''', (recommendation_id, resource_id, resource_name, score_str, time_cost_str, money_cost_str, help_score_str))
+                    
+                    conn.commit()
+                    conn.close()
                 
                 # 不再强制填充到limit数量，只推荐与用户水平匹配的资源
         
@@ -1380,6 +1737,13 @@ class PathPlanner:
         Returns:
             学习方案字典
         """
+        # 清空得分表，为新对话准备干净的数据
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute('DELETE FROM recommendation_scores')
+        conn.commit()
+        conn.close()
+        
         # 1. 构建学习路径
         raw_path = self._build_learning_path(topic, level, goal)
         
@@ -1433,10 +1797,10 @@ class PathPlanner:
             optimized_path = programming_basics + other_stages
         
         for i, (stage_topic, stage_level) in enumerate(optimized_path):
-            # 获取资源，传递当前阶段的主题、已使用的资源ID、学习目标和金钱预算
+            # 获取资源，传递当前阶段的主题、已使用的资源ID、学习目标、金钱预算和时间预算
             filtered_resources = self._get_resources_by_topic(
                 stage_topic, stage_level, original_topic=stage_topic, 
-                used_resource_ids=used_resource_ids, limit=3, goal=goal, money_budget=money_budget
+                used_resource_ids=used_resource_ids, limit=3, goal=goal, money_budget=money_budget, time_budget=time_budget
             )
             
             # 记录使用的资源ID
@@ -1448,7 +1812,7 @@ class PathPlanner:
                 # 尝试获取更多资源，不传递used_resource_ids，以获取所有可能的资源
                 more_resources = self._get_resources_by_topic(
                     stage_topic, stage_level, original_topic=stage_topic, 
-                    limit=5, goal=goal, money_budget=money_budget
+                    limit=5, goal=goal, money_budget=money_budget, time_budget=time_budget
                 )
                 # 手动过滤已使用的资源
                 new_resources = []
@@ -1478,6 +1842,15 @@ class PathPlanner:
                 else:
                     resource_time = 50
                 learning_time += resource_time
+                
+                # 更新resource表中的learning_time字段
+                conn = sqlite3.connect(self.db_path)
+                cursor = conn.cursor()
+                cursor.execute('''
+                    UPDATE resources SET learning_time = ? WHERE id = ?
+                ''', (resource_time, res[0]))
+                conn.commit()
+                conn.close()
             total_time += learning_time
             
             # 计算需要的周数，保留小数点后一位

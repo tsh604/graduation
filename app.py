@@ -365,6 +365,13 @@ class DialogueManager:
         daily_time = context.get('daily_time', 2)  # 默认每天学习2小时
         time_per_week = daily_time * 7  # 每周学习时间 = 每天学习时间 × 7天
         
+        # 清空得分表，为新对话准备干净的数据
+        conn = sqlite3.connect('data/learning.db')
+        cursor = conn.cursor()
+        cursor.execute('DELETE FROM recommendation_scores')
+        conn.commit()
+        conn.close()
+        
         # 生成学习方案
         try:
             plan = generate_learning_plan(topic, level, goal, time_budget=time_budget, money_budget=money_budget, time_per_week=time_per_week)
@@ -913,28 +920,13 @@ class DialogueManager:
                 # 检查时间预算是否有效
                 if time_budget > 0:
                     context['time_budget'] = time_budget
-                    state['stage'] = 'asking_money_budget'
-                    return "你学习所消耗的金钱预算是多少？"
+                    state['stage'] = 'asking_daily_time'
+                    return "你每天打算学习多长时间？"
                 else:
                     return "请输入有效的学习时间"
             except ValueError:
                 return "请输入有效的学习时间"
         
-        elif stage == 'asking_money_budget':
-            # 提取金钱预算，支持带有"元"字的输入
-            try:
-                message = user_message.strip().lower()
-                # 移除"元"字
-                money_str = message.replace('元', '').strip()
-                money_budget = float(money_str)
-                if money_budget >= 0:
-                    context['money_budget'] = money_budget
-                    state['stage'] = 'asking_daily_time'
-                    return "你每天打算学习多长时间？"
-                else:
-                    return "请输入有效的金钱预算"
-            except ValueError:
-                return "请输入有效的金钱预算"
         elif stage == 'asking_daily_time':
             # 提取每天学习时间
             try:
@@ -946,13 +938,28 @@ class DialogueManager:
                     daily_time = float(message)
                 if daily_time > 0 and daily_time <= 12:
                     context['daily_time'] = daily_time
-                    state['stage'] = 'recommending'
-                    # 进入推荐阶段
-                    return DialogueManager._generate_recommendation(context)
+                    state['stage'] = 'asking_money_budget'
+                    return "你学习所消耗的金钱预算是多少？"
                 else:
                     return "请输入有效的每天学习时间"
             except ValueError:
                 return "请输入有效的每天学习时间"
+        elif stage == 'asking_money_budget':
+            # 提取金钱预算，支持带有"元"字的输入
+            try:
+                message = user_message.strip().lower()
+                # 移除"元"字
+                money_str = message.replace('元', '').strip()
+                money_budget = float(money_str)
+                if money_budget >= 0:
+                    context['money_budget'] = money_budget
+                    state['stage'] = 'recommending'
+                    # 进入推荐阶段
+                    return DialogueManager._generate_recommendation(context)
+                else:
+                    return "请输入有效的金钱预算"
+            except ValueError:
+                return "请输入有效的金钱预算"
         
         elif stage == 'recommending':
             # 检查是否是解释类问题
@@ -994,6 +1001,15 @@ def index():
     # 生成新的user_id
     if 'user_id' not in session:
         session['user_id'] = str(uuid.uuid4())[:8]
+    
+    # 清空得分表，为新对话准备干净的数据
+    conn = sqlite3.connect('data/learning.db')
+    cursor = conn.cursor()
+    cursor.execute('DELETE FROM recommendation_scores')
+    # 重置自增ID计数器
+    cursor.execute('DELETE FROM sqlite_sequence WHERE name="recommendation_scores"')
+    conn.commit()
+    conn.close()
     
     return render_template('index.html')
 
@@ -1136,6 +1152,18 @@ def search_resource():
         return jsonify({'status': 'success', 'message': f'成功添加{added_count}个资源', 'resources': resources})
     except Exception as e:
         return jsonify({'status': 'error', 'message': f'搜索资源失败: {str(e)}'})
+
+@app.route('/@vite/client')
+def vite_client():
+    """处理Vite客户端请求，避免404错误"""
+    # 返回一个空的响应，状态码204表示无内容
+    return '', 204
+
+@app.route('/favicon.ico')
+def favicon():
+    """处理favicon.ico请求，避免404错误"""
+    # 返回一个空的响应，状态码204表示无内容
+    return '', 204
 
 if __name__ == '__main__':
     # 清空对话状态
