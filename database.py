@@ -20,7 +20,9 @@ def init_database():
             knowledge_point TEXT,
             difficulty TEXT,
             url TEXT,
-            description TEXT
+            description TEXT,
+            learning_time REAL,
+            price REAL
         )
     ''')
     
@@ -32,6 +34,23 @@ def init_database():
             user_message TEXT,
             bot_response TEXT,
             timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+    
+    # 创建推荐得分表
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS recommendation_scores (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            recommendation_id TEXT,
+            resource_id INTEGER,
+            resource_name TEXT,
+            score REAL,
+            relevance_cost REAL,
+            format_cost REAL,
+            goal_cost REAL,
+            time_cost REAL,
+            price_cost REAL,
+            recommended_at DATETIME DEFAULT CURRENT_TIMESTAMP
         )
     ''')
     
@@ -227,10 +246,35 @@ def init_database():
             ('Zsh配置', '文章', '工具', '中级', 'https://ohmyz.sh/', '终端美化'),
         ]
         
+        import random
+        
+        # 为每个资源添加学习时间和价格数据
+        resources_with_time_and_price = []
+        for resource in sample_resources:
+            # 为不同类型和难度的资源设置合理的学习时间和价格
+            title, resource_type, knowledge_point, difficulty, url, description = resource
+            
+            # 按照用户要求的范围设置学习时间（小时）
+            if difficulty == '初级':
+                learning_time = random.randint(40, 60)
+            elif difficulty == '中级':
+                learning_time = random.randint(60, 80)
+            elif difficulty == '高级':
+                learning_time = random.randint(80, 100)
+            else:
+                learning_time = random.randint(50, 70)  # 默认范围
+            
+            # 按照用户要求的范围设置价格（元）
+            price = random.randint(50, 100)
+            
+            # 添加到新列表
+            resources_with_time_and_price.append(resource + (learning_time, price))
+        
+        # 插入数据，包括学习时间和价格
         cursor.executemany('''
-            INSERT INTO resources (title, type, knowledge_point, difficulty, url, description)
-            VALUES (?, ?, ?, ?, ?, ?)
-        ''', sample_resources)
+            INSERT INTO resources (title, type, knowledge_point, difficulty, url, description, learning_time, price)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ''', resources_with_time_and_price)
         
         conn.commit()
         

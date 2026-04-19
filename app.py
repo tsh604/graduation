@@ -365,6 +365,14 @@ class DialogueManager:
         daily_time = context.get('daily_time', 2)  # 默认每天学习2小时
         time_per_week = daily_time * 7  # 每周学习时间 = 每天学习时间 × 7天
         
+        # 计算总学习时间（小时）：时间预算（天） × 每天学习时间（小时）
+        if time_budget:
+            # 检查用户输入的时间单位
+            is_hours = context.get('is_hours', False)
+            if not is_hours:
+                # 如果是天、月、年单位，转换为总学习时间（小时）：天数 × 每天学习时间
+                time_budget = time_budget * daily_time
+        
         # 清空得分表，为新对话准备干净的数据
         conn = sqlite3.connect('data/learning.db')
         cursor = conn.cursor()
@@ -412,6 +420,8 @@ class DialogueManager:
             response += "\n如果你想调整学习计划，或者了解其他技术的学习方案，随时告诉我！"
             return response
         except Exception as e:
+            # 打印异常信息，以便调试
+            print(f"生成学习方案失败: {str(e)}")
             # 生成失败时的备用方案
             return f"抱歉，暂时无法为{topic}生成学习方案。你想了解其他技术吗？"
     
@@ -883,11 +893,13 @@ class DialogueManager:
             try:
                 message = user_message.strip().lower()
                 time_budget = 0
+                is_hours = False
                 
                 if '小时' in message:
                     # 处理小时单位
                     time_str = message.replace('小时', '').strip()
                     time_budget = float(time_str)
+                    is_hours = True
                     if time_budget <= 0:
                         return "请输入有效的学习时间"
                 elif '天' in message:
@@ -895,31 +907,34 @@ class DialogueManager:
                     time_str = message.replace('天', '').strip()
                     days = float(time_str)
                     if days > 0 and days <= 365:
-                        # 直接转换为小时
-                        time_budget = days * 24
+                        # 存储天数
+                        time_budget = days
                 elif '月' in message:
                     # 处理月单位
                     time_str = message.replace('个月', '').replace('月', '').strip()
                     months = float(time_str)
                     if months > 0 and months <= 12:
-                        # 转换为小时（每月按28天，每天24小时计算）
-                        time_budget = months * 28 * 24
+                        # 转换为天数（每月按28天计算）
+                        time_budget = months * 28
                 elif '年' in message:
                     # 处理年单位
                     time_str = message.replace('年', '').strip()
                     years = float(time_str)
                     if years > 0 and years <= 5:
-                        # 转换为小时（每年按365天，每天24小时计算）
-                        time_budget = years * 365 * 24
+                        # 转换为天数（每年按365天计算）
+                        time_budget = years * 365
                 else:
                     # 尝试直接解析为数字（默认小时）
                     time_budget = float(message)
+                    is_hours = True
                     if time_budget <= 0:
                         return "请输入有效的学习时间"
                 
                 # 检查时间预算是否有效
                 if time_budget > 0:
+                    # 存储时间预算和单位信息
                     context['time_budget'] = time_budget
+                    context['is_hours'] = is_hours
                     state['stage'] = 'asking_daily_time'
                     return "你每天打算学习多长时间？"
                 else:

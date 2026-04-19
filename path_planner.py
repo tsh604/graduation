@@ -22,6 +22,7 @@ class PathPlanner:
             used_resource_ids: 已使用的资源ID集合，用于避免重复推荐
             goal: 学习目标
             money_budget: 金钱预算（元）
+            time_budget: 时间预算（小时）
         """
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
@@ -43,35 +44,32 @@ class PathPlanner:
                 
                 # 然后根据学习目标获取其他Python相关资源
                 if goal == '找工作':
-                    # 找工作目标：优先包含"面试"、"就业"、"项目"等关键词的资源
+                    # 找工作目标：获取Python相关资源
                     cursor.execute('''
                         SELECT * FROM resources 
                         WHERE (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?) 
                         AND difficulty = ?
                         AND title NOT LIKE ?
-                        AND (title LIKE ? OR description LIKE ? OR knowledge_point LIKE ?)
                         LIMIT ?
-                    ''', ('%Python%', '%Python%', '%Python%', level, '%Python基础教程%', '%面试%', '%就业%', '%项目%', limit * 10))
+                    ''', ('%Python%', '%Python%', '%Python%', level, '%Python基础教程%', limit * 10))
                 elif goal == '兴趣学习':
-                    # 兴趣学习目标：优先包含"趣味"、"入门"、"实践"等关键词的资源
+                    # 兴趣学习目标：获取Python相关资源
                     cursor.execute('''
                         SELECT * FROM resources 
                         WHERE (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?) 
                         AND difficulty = ?
                         AND title NOT LIKE ?
-                        AND (title LIKE ? OR description LIKE ? OR knowledge_point LIKE ?)
                         LIMIT ?
-                    ''', ('%Python%', '%Python%', '%Python%', level, '%Python基础教程%', '%趣味%', '%入门%', '%实践%', limit * 10))
+                    ''', ('%Python%', '%Python%', '%Python%', level, '%Python基础教程%', limit * 10))
                 elif goal == '项目开发':
-                    # 项目开发目标：优先包含"项目"、"实战"、"开发"等关键词的资源
+                    # 项目开发目标：获取Python相关资源
                     cursor.execute('''
                         SELECT * FROM resources 
                         WHERE (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?) 
                         AND difficulty = ?
                         AND title NOT LIKE ?
-                        AND (title LIKE ? OR description LIKE ? OR knowledge_point LIKE ?)
                         LIMIT ?
-                    ''', ('%Python%', '%Python%', '%Python%', level, '%Python基础教程%', '%项目%', '%实战%', '%开发%', limit * 10))
+                    ''', ('%Python%', '%Python%', '%Python%', level, '%Python基础教程%', limit * 10))
                 else:
                     # 其他目标：使用基本查询
                     cursor.execute('''
@@ -279,38 +277,35 @@ class PathPlanner:
                 
                 # 先尝试获取通用编程基础资源，排除Python特定资源和数学资源
                 if goal == '找工作':
-                    # 找工作目标：优先包含"面试"、"就业"、"项目"等关键词的资源
+                    # 找工作目标：获取编程基础相关资源
                     cursor.execute('''
                         SELECT * FROM resources 
                         WHERE difficulty = ? 
                         AND (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?)
                         AND NOT (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?)
                         AND NOT (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?)
-                        AND (title LIKE ? OR description LIKE ? OR knowledge_point LIKE ?)
                         LIMIT ?
-                    ''', (level or '初级', '%编程%', '%基础%', '%编程%', '%Python%', '%Python%', '%Python%', '%数学%', '%数学%', '%数学%', '%面试%', '%就业%', '%项目%', limit * 5))
+                    ''', (level or '初级', '%编程%', '%基础%', '%编程%', '%Python%', '%Python%', '%Python%', '%数学%', '%数学%', '%数学%', limit * 5))
                 elif goal == '兴趣学习':
-                    # 兴趣学习目标：优先包含"趣味"、"入门"、"实践"等关键词的资源
+                    # 兴趣学习目标：获取编程基础相关资源
                     cursor.execute('''
                         SELECT * FROM resources 
                         WHERE difficulty = ? 
                         AND (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?)
                         AND NOT (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?)
                         AND NOT (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?)
-                        AND (title LIKE ? OR description LIKE ? OR knowledge_point LIKE ?)
                         LIMIT ?
-                    ''', (level or '初级', '%编程%', '%基础%', '%编程%', '%Python%', '%Python%', '%Python%', '%数学%', '%数学%', '%数学%', '%趣味%', '%入门%', '%实践%', limit * 5))
+                    ''', (level or '初级', '%编程%', '%基础%', '%编程%', '%Python%', '%Python%', '%Python%', '%数学%', '%数学%', '%数学%', limit * 5))
                 elif goal == '项目开发':
-                    # 项目开发目标：优先包含"项目"、"实战"、"开发"等关键词的资源
+                    # 项目开发目标：获取编程基础相关资源
                     cursor.execute('''
                         SELECT * FROM resources 
                         WHERE difficulty = ? 
                         AND (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?)
                         AND NOT (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?)
                         AND NOT (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?)
-                        AND (title LIKE ? OR description LIKE ? OR knowledge_point LIKE ?)
                         LIMIT ?
-                    ''', (level or '初级', '%编程%', '%基础%', '%编程%', '%Python%', '%Python%', '%Python%', '%数学%', '%数学%', '%数学%', '%项目%', '%实战%', '%开发%', limit * 5))
+                    ''', (level or '初级', '%编程%', '%基础%', '%编程%', '%Python%', '%Python%', '%Python%', '%数学%', '%数学%', '%数学%', limit * 5))
                 else:
                     # 其他目标：使用基本查询
                     cursor.execute('''
@@ -1003,57 +998,180 @@ class PathPlanner:
                 else:
                     other_resources.append(res)
             
-            # 对Python资源进行排序，优先推荐学习成本低、适合初学者的资源
-            if level == '初级':
-                # 定义资源评分函数，考虑以下因素：
-                # 1. 是否包含基础关键词（权重2）
-                # 2. 是否是课程形式（通常更系统，权重1）
-                # 3. 学习时间成本（权重1，时间越合理得分越高）
-                # 4. 与主题相关性（权重1）
-                def score_resource(res):
-                    score = 0
-                    title_lower = (res[1] or '').lower()
-                    resource_text = ''
-                    for i in range(1, min(5, len(res))):
-                        if res[i]:
-                            resource_text += str(res[i]) + ' '
-                    # 基础关键词加分
-                    if '基础' in title_lower or '入门' in title_lower or 'tutorial' in title_lower:
-                        score += 2
-                    # 课程形式加分
-                    if '课程' in title_lower or '教程' in title_lower:
-                        score += 1
-                    # 与主题相关性加分
-                    if 'Python' in resource_text:
-                        score += 1
-                    # 学习时间成本加分
-                    # 尝试获取资源的学习时间
-                    learning_time = None
-                    if len(res) > 6 and res[6]:
-                        try:
-                            learning_time = float(res[6])
-                        except (ValueError, TypeError):
-                            pass
-                    # 如果有学习时间，根据时间合理性加分
-                    if learning_time:
-                        # 初级资源的合理学习时间范围是20-50小时
-                        if 20 <= learning_time <= 50:
-                            score += 1
-                        # 时间过长或过短都会影响得分
-                        elif learning_time < 20:
-                            score += 0.5  # 时间过短，可能内容不完整
-                        elif learning_time > 50:
-                            score += 0.5  # 时间过长，可能超出初学者能力
-                    return score
+            # 定义资源评分函数，考虑以下因素：
+            # 1. 主题相关性（权重0.3）
+            # 2. 课程形式（权重0.2）
+            # 3. 学习目标相关度（权重0.25）
+            # 4. 时间成本（权重0.15）
+            # 5. 金钱成本（权重0.1）
+            # 模拟大模型调用，获取相关性程度
+            def get_relevance_score(text, topic):
+                # 这里是模拟大模型的实现，实际项目中可以替换为真实的大模型调用
+                # 基于关键词匹配来模拟相关性计算
+                text_lower = text.lower()
+                topic_lower = topic.lower()
                 
-                # 按评分排序
-                python_resources.sort(key=score_resource, reverse=True)
+                # 检查主题在文本中出现的次数
+                topic_count = text_lower.count(topic_lower)
+                
+                # 检查相关关键词的数量
+                related_keywords = [topic_lower, '编程', '代码', '开发', '学习', '教程', '课程']
+                keyword_count = sum(1 for keyword in related_keywords if keyword in text_lower)
+                
+                # 计算相关性分数（0-100）
+                score = 0
+                if topic_count > 0:
+                    score = 70 + min(topic_count * 10, 30)  # 主题出现至少70分，最多100分
+                elif keyword_count > 0:
+                    score = min(keyword_count * 20, 60)  # 相关关键词最多60分
+                
+                return score
+            
+            def score_resource(res):
+                # 初始化各项成本（成本越低越好）
+                relevance_cost = 100  # 主题相关性成本（默认最高成本）
+                format_cost = 100     # 课程形式成本
+                goal_cost = 100       # 学习目标相关成本
+                time_cost = 100       # 时间成本
+                price_cost = 100      # 金钱成本
+                
+                # 获取资源信息
+                title_lower = (res[1] or '').lower()
+                resource_text = ''
+                for i in range(1, min(9, len(res))):  # 扩展到更多字段，包括学习时间和价格
+                    if res[i]:
+                        resource_text += str(res[i]) + ' '
+                resource_text_lower = resource_text.lower()
+                
+                # 1. 主题相关性成本（权重：0.3）
+                # 调用大模型获取相关性程度（0-100%），然后用100减去这个值作为成本
+                current_topic = 'Python' if 'Python' in topic else topic  # 使用当前主题作为关键词
+                
+                # 对于编程基础阶段，使用更广泛的关键词
+                if topic == '编程基础':
+                    # 编程基础相关的关键词
+                    programming_basic_keywords = ['编程', '基础', '入门', 'html', 'css', 'javascript', 'linux', 'git', '命令行']
+                    # 计算与编程基础的相关性
+                    relevance_score = 0
+                    text_lower = resource_text.lower()
+                    
+                    # 检查资源文本中包含的编程基础关键词数量
+                    keyword_count = sum(1 for keyword in programming_basic_keywords if keyword in text_lower)
+                    
+                    if keyword_count > 0:
+                        # 关键词数量越多，相关性越高
+                        relevance_score = min(keyword_count * 15, 100)
+                    else:
+                        # 没有匹配的关键词，使用较低的相关性分数
+                        relevance_score = 20
+                else:
+                    # 使用默认的相关性计算
+                    relevance_score = get_relevance_score(resource_text, current_topic)
+                
+                relevance_cost = 100 - relevance_score
+                
+                # 2. 课程形式成本（权重：0.2）
+                # 视频 > 课程/教程 > 文章
+                if '视频' in title_lower or 'video' in title_lower:
+                    format_cost = 20  # 视频形式成本最低
+                elif '课程' in title_lower or '教程' in title_lower:
+                    format_cost = 40  # 课程形式成本次之
+                elif '文章' in title_lower or 'blog' in title_lower or 'article' in title_lower:
+                    format_cost = 60  # 文章形式成本较高
+                elif '书籍' in title_lower or 'book' in title_lower:
+                    format_cost = 30  # 书籍形式成本较低
+                else:
+                    format_cost = 80  # 其他形式成本最高
+                
+                # 3. 学习目标相关成本（权重：0.25）
+                # 与学习目标相关度越高，成本越低
+                # 调用大模型获取相关性程度（0-100%），然后用100减去这个值作为成本
+                goal_text = ''
+                if goal == '找工作':
+                    goal_text = '面试 就业 项目 简历 offer 求职 技术栈 算法 数据结构 系统设计 职业发展'
+                elif goal == '兴趣学习':
+                    goal_text = '趣味 入门 实践 好玩 有趣 探索 实验 创意 兴趣 爱好 娱乐 游戏 挑战'
+                elif goal == '项目开发':
+                    goal_text = '项目 实战 开发 案例 应用 构建 实现 工程 部署 架构 编程 编码 调试 测试'
+                
+                goal_relevance_score = get_relevance_score(resource_text, goal_text)
+                goal_cost = 100 - goal_relevance_score
+                
+                # 4. 时间成本（权重：0.15）
+                # 学习资源的时间除以总学习时间
+                learning_time = None
+                if len(res) > 7:
+                    try:
+                        if res[7]:
+                            learning_time = float(res[7])
+                    except (ValueError, TypeError):
+                        pass
+                
+                # 计算总学习时间
+                # 如果用户提供了时间预算，使用用户输入的值
+                # 否则，按照用户要求的计算方式：4个月，每天学习4小时，一个月按4周计算
+                total_learning_time = 0
+                if time_budget and time_budget > 0:
+                    total_learning_time = time_budget
+                else:
+                    # 按照用户要求的计算方式：4个月，每天学习4小时，一个月按4周计算
+                    # 4个月 * 4周/月 * 7天/周 * 4小时/天 = 448小时
+                    total_learning_time = 4 * 4 * 7 * 4  # 448小时
+                
+                if learning_time and total_learning_time > 0:
+                    # 学习时间除以总学习时间，再乘以100作为成本
+                    time_cost = min(100, (learning_time / total_learning_time) * 100)
+                else:
+                    # 无学习时间信息，使用默认成本
+                    time_cost = 70
+                
+                # 5. 金钱成本（权重：0.1）
+                # 学习资源的金钱除以总金钱
+                price = None
+                if len(res) > 8:
+                    try:
+                        if res[8]:
+                            price = float(res[8])
+                    except (ValueError, TypeError):
+                        pass
+                
+                # 总金钱预算
+                total_money = money_budget if money_budget > 0 else 1000  # 默认总预算1000元
+                
+                if price:
+                    # 价格除以总金钱，再乘以100作为成本
+                    price_cost = min(100, (price / total_money) * 100)
+                else:
+                    # 无价格信息，使用默认成本
+                    price_cost = 70
+                
+                # 计算综合成本（权重分配）
+                total_cost = (
+                    relevance_cost * 0.3 +
+                    format_cost * 0.2 +
+                    goal_cost * 0.25 +
+                    time_cost * 0.15 +
+                    price_cost * 0.1
+                )
+                
+                # 保留两位小数
+                total_cost = round(total_cost, 2)
+                relevance_cost = round(relevance_cost, 2)
+                format_cost = round(format_cost, 2)
+                goal_cost = round(goal_cost, 2)
+                time_cost = round(time_cost, 2)
+                price_cost = round(price_cost, 2)
+                
+                # 返回总成本和各项成本
+                return total_cost, relevance_cost, format_cost, goal_cost, time_cost, price_cost
+            
+            # 对Python资源进行排序，优先推荐学习成本低的资源
+            # 按成本排序（成本越低越好）
+            python_resources.sort(key=lambda x: score_resource(x)[0])
             
             # 优先使用Python相关资源
             candidate_resources = python_resources + other_resources
             
-            # 综合考虑学习时间和金钱成本，选择最优的3个资源
-            # 对于所有目标，我们需要选择对用户损失最小的资源组合
             # 对资源进行去重处理
             seen_resource_ids = set()
             unique_resources = []
@@ -1063,74 +1181,8 @@ class PathPlanner:
                     seen_resource_ids.add(resource_id)
                     unique_resources.append(resource)
             
-            # 计算每个资源的成本得分，并保存详细信息
-            resources_with_cost = []
-            for resource in unique_resources:
-                # 计算详细成本信息
-                learning_time = None
-                # 尝试获取learning_time，根据资源元组的实际结构
-                # 首先尝试索引7（learning_time在索引7的位置）
-                if len(resource) > 7 and resource[7]:
-                    try:
-                        learning_time = float(resource[7])
-                    except (ValueError, TypeError):
-                        pass
-                # 如果索引7失败，尝试索引6
-                if learning_time is None and len(resource) > 6 and resource[6]:
-                    try:
-                        learning_time = float(resource[6])
-                    except (ValueError, TypeError):
-                        pass
-                # 如果索引6失败，尝试索引8
-                if learning_time is None and len(resource) > 8 and resource[8]:
-                    try:
-                        learning_time = float(resource[8])
-                    except (ValueError, TypeError):
-                        pass
-                
-                # 为每个资源生成一个50-100之间的随机价格
-                import random
-                price = random.randint(50, 100)
-                
-                # 更新resource表中的price字段
-                conn = sqlite3.connect(self.db_path)
-                cursor = conn.cursor()
-                cursor.execute('''
-                    UPDATE resources SET price = ? WHERE id = ?
-                ''', (price, resource[0]))
-                conn.commit()
-                conn.close()
-                
-                # 暂时不计算帮助得分
-                help_score = 0
-                
-                # 计算时间成本和金钱成本
-                # 时间成本：基于用户的时间预算，计算资源学习时间占总时间预算的比例
-                time_cost = (learning_time / time_budget * 100) if learning_time and time_budget else 0
-                # 金钱成本：基于用户的金钱预算，计算资源价格占总金钱预算的比例
-                money_cost = (price / money_budget * 100) if price and money_budget else 0
-                
-                # 计算总成本得分（重新设计的得分方式）
-                # 新的得分方式：
-                # 1. 时间成本：基于用户的时间预算，计算资源学习时间占总时间预算的比例
-                # 2. 金钱成本：基于用户的金钱预算，计算资源价格占总金钱预算的比例
-                # 3. 帮助得分：基于资源对学习目标的帮助程度
-                # 4. 综合得分：(时间成本 * 0.6 + 金钱成本 * 0.4) - help_score
-                # 得分越低越好
-                total_score = (time_cost * 0.6 + money_cost * 0.4) - help_score
-                
-                # 保留两位小数
-                total_score = round(total_score, 2)
-                time_cost = round(time_cost, 2)
-                money_cost = round(money_cost, 2)
-                help_score = round(help_score, 2)
-                
-                resources_with_cost.append((resource, total_score, time_cost, money_cost, help_score))
-            
-            # 按成本得分排序（得分越低越好）
-            resources_with_cost.sort(key=lambda x: x[1])
-            # 选择成本最低的3个资源
-            filtered_resources = [resource for resource, score, time_cost, money_cost, help_score in resources_with_cost[:limit]]
+            # 选择评分最高的3个资源
+            filtered_resources = unique_resources[:limit]
             
             # 将得分信息插入到数据库
             import uuid
@@ -1141,80 +1193,225 @@ class PathPlanner:
             recommendation_id = str(uuid.uuid4())
             
             # 插入得分信息
-            for resource, score, time_cost, money_cost, help_score in resources_with_cost:
+            for resource in filtered_resources:
                 resource_id = resource[0]
                 resource_name = resource[1] if len(resource) >= 2 else 'Unknown'
+                # 计算资源的综合成本和各项成本
+                total_cost, relevance_cost, format_cost, goal_cost, time_cost_value, price_cost_value = score_resource(resource)
                 # 格式化为两位小数
-                score_str = f"{score:.2f}"
+                cost_str = f"{total_cost:.2f}"
+                # 尝试获取学习时间和价格
+                learning_time = None
+                if len(resource) > 6 and resource[6]:
+                    try:
+                        learning_time = float(resource[6])
+                    except (ValueError, TypeError):
+                        pass
+                price = None
+                if len(resource) > 8 and resource[8]:
+                    try:
+                        price = float(resource[8])
+                    except (ValueError, TypeError):
+                        pass
+                # 计算时间成本和金钱成本
+                time_cost = (learning_time / time_budget * 100) if learning_time and time_budget else 0
+                money_cost = (price / money_budget * 100) if price and money_budget else 0
                 time_cost_str = f"{time_cost:.2f}"
                 money_cost_str = f"{money_cost:.2f}"
-                help_score_str = f"{help_score:.2f}"
+                help_score_str = "0.00"  # 暂时不计算帮助得分
                 cursor.execute('''
-                    INSERT INTO recommendation_scores (recommendation_id, resource_id, resource_name, score, time_cost, money_cost, help_score)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
-                ''', (recommendation_id, resource_id, resource_name, score_str, time_cost_str, money_cost_str, help_score_str))
+                    INSERT INTO recommendation_scores (recommendation_id, resource_id, resource_name, score, relevance_cost, format_cost, goal_cost, time_cost, price_cost)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ''', (recommendation_id, resource_id, resource_name, cost_str, relevance_cost, format_cost, goal_cost, time_cost_value, price_cost_value))
             
             conn.commit()
             conn.close()
         else:
-            # 对于非Python主题，使用原始逻辑
+            # 对于非Python主题，使用统一逻辑
             # 提取主题名称（去除难度级别部分）
             topic_name = topic.split(' ')[0].split('(')[0]
             
-            # 定义资源评分函数，考虑学习成本和适合度
+            # 对资源进行去重处理
+            seen_resource_ids = set()
+            unique_resources = []
+            for resource in resources:
+                resource_id = resource[0]
+                if resource_id not in seen_resource_ids:
+                    seen_resource_ids.add(resource_id)
+                    unique_resources.append(resource)
+            resources = unique_resources
+            
+            # 定义资源综合成本评估函数，将评分机制转换为成本机制
             def score_resource(res):
-                score = 0
+                # 初始化各项成本（成本越低越好）
+                relevance_cost = 100  # 主题相关性成本（默认最高成本）
+                format_cost = 100     # 课程形式成本
+                goal_cost = 100       # 学习目标相关成本
+                time_cost = 100       # 时间成本
+                price_cost = 100      # 金钱成本
+                
+                # 获取资源信息
                 title_lower = (res[1] or '').lower()
                 resource_text = ''
-                for i in range(1, min(5, len(res))):
+                for i in range(1, min(9, len(res))):  # 扩展到更多字段，包括学习时间和价格
                     if res[i]:
                         resource_text += str(res[i]) + ' '
+                resource_text_lower = resource_text.lower()
                 
-                # 基础关键词加分
-                if '基础' in title_lower or '入门' in title_lower or 'tutorial' in title_lower:
-                    score += 2
-                # 课程形式加分
-                if '课程' in title_lower or '教程' in title_lower:
-                    score += 1
-                # 与主题相关性加分
-                if topic_name in resource_text:
-                    score += 1
-                # 学习时间成本加分
-                # 尝试获取资源的学习时间
+                # 1. 主题相关性成本（权重：0.3）
+                # 对于编程基础阶段，使用更广泛的关键词
+                if topic == '编程基础':
+                    # 编程基础相关的关键词
+                    programming_basic_keywords = ['编程', '基础', '入门', 'html', 'css', 'javascript', 'linux', 'git', '命令行']
+                    # 计算与编程基础的相关性
+                    relevance_score = 0
+                    text_lower = resource_text.lower()
+                    
+                    # 检查资源文本中包含的编程基础关键词数量
+                    keyword_count = sum(1 for keyword in programming_basic_keywords if keyword in text_lower)
+                    
+                    if keyword_count > 0:
+                        # 关键词数量越多，相关性越高
+                        relevance_score = min(keyword_count * 15, 100)
+                    else:
+                        # 没有匹配的关键词，使用较低的相关性分数
+                        relevance_score = 20
+                    
+                    relevance_cost = 100 - relevance_score
+                else:
+                    # 相关性越高，成本越低
+                    if topic_name in resource_text:
+                        relevance_cost = 20  # 直接包含主题名称，成本最低
+                    else:
+                        # 检查资源文本中包含主题相关关键词的数量
+                        topic_related_keywords = topic_name.split()
+                        match_count = 0
+                        for keyword in topic_related_keywords:
+                            if keyword.lower() in resource_text_lower:
+                                match_count += 1
+                        if match_count > 0:
+                            # 根据匹配关键词数量降低成本
+                            relevance_cost = 40 + (len(topic_related_keywords) - match_count) * 10
+                        else:
+                            # 完全不相关的资源，成本较高但不是最高
+                            relevance_cost = 80
+                
+                # 2. 课程形式成本（权重：0.2）
+                # 视频 > 课程/教程 > 文章
+                if '视频' in title_lower or 'video' in title_lower:
+                    format_cost = 20  # 视频形式成本最低
+                elif '课程' in title_lower or '教程' in title_lower:
+                    format_cost = 40  # 课程形式成本次之
+                elif '文章' in title_lower or 'blog' in title_lower or 'article' in title_lower:
+                    format_cost = 60  # 文章形式成本较高
+                elif '书籍' in title_lower or 'book' in title_lower:
+                    format_cost = 30  # 书籍形式成本较低
+                else:
+                    format_cost = 80  # 其他形式成本最高
+                
+                # 3. 学习目标相关成本（权重：0.25）
+                # 与学习目标相关度越高，成本越低
+                goal_text = ''
+                if goal == '找工作':
+                    goal_text = '面试 就业 项目 简历 offer 求职 技术栈 算法 数据结构 系统设计 职业发展'
+                elif goal == '兴趣学习':
+                    goal_text = '趣味 入门 实践 好玩 有趣 探索 实验 创意 兴趣 爱好 娱乐 游戏 挑战'
+                elif goal == '项目开发':
+                    goal_text = '项目 实战 开发 案例 应用 构建 实现 工程 部署 架构 编程 编码 调试 测试'
+                
+                # 模拟大模型调用，获取相关性程度
+                def get_relevance_score(text, topic):
+                    # 这里是模拟大模型的实现，实际项目中可以替换为真实的大模型调用
+                    # 基于关键词匹配来模拟相关性计算
+                    text_lower = text.lower()
+                    topic_lower = topic.lower()
+                    
+                    # 检查主题在文本中出现的次数
+                    topic_count = text_lower.count(topic_lower)
+                    
+                    # 检查相关关键词的数量
+                    related_keywords = [topic_lower, '编程', '代码', '开发', '学习', '教程', '课程']
+                    keyword_count = sum(1 for keyword in related_keywords if keyword in text_lower)
+                    
+                    # 计算相关性分数（0-100）
+                    score = 0
+                    if topic_count > 0:
+                        score = 70 + min(topic_count * 10, 30)  # 主题出现至少70分，最多100分
+                    elif keyword_count > 0:
+                        score = min(keyword_count * 20, 60)  # 相关关键词最多60分
+                    
+                    return score
+                
+                goal_relevance_score = get_relevance_score(resource_text, goal_text)
+                goal_cost = 100 - goal_relevance_score
+                
+                # 4. 时间成本（权重：0.15）
+                # 学习资源的时间除以总学习时间
                 learning_time = None
-                if len(res) > 6 and res[6]:
+                if len(res) > 7:
                     try:
-                        learning_time = float(res[6])
+                        if res[7]:
+                            learning_time = float(res[7])
                     except (ValueError, TypeError):
                         pass
-                # 如果有学习时间，根据时间合理性加分
-                if learning_time:
-                    # 根据难度级别设置合理的学习时间范围
-                    if level == '初级':
-                        # 初级资源的合理学习时间范围是20-50小时
-                        if 20 <= learning_time <= 50:
-                            score += 1
-                        elif learning_time < 20:
-                            score += 0.5  # 时间过短，可能内容不完整
-                        elif learning_time > 50:
-                            score += 0.5  # 时间过长，可能超出初学者能力
-                    elif level == '中级':
-                        # 中级资源的合理学习时间范围是40-70小时
-                        if 40 <= learning_time <= 70:
-                            score += 1
-                        elif learning_time < 40:
-                            score += 0.5
-                        elif learning_time > 70:
-                            score += 0.5
-                    elif level == '高级':
-                        # 高级资源的合理学习时间范围是60-100小时
-                        if 60 <= learning_time <= 100:
-                            score += 1
-                        elif learning_time < 60:
-                            score += 0.5
-                        elif learning_time > 100:
-                            score += 0.5
-                return score
+                
+                # 计算总学习时间
+                # 如果用户提供了时间预算，使用用户输入的值
+                # 否则，按照用户要求的计算方式：4个月，每天学习4小时，一个月按4周计算
+                total_learning_time = 0
+                if time_budget and time_budget > 0:
+                    total_learning_time = time_budget
+                else:
+                    # 按照用户要求的计算方式：4个月，每天学习4小时，一个月按4周计算
+                    # 4个月 * 4周/月 * 7天/周 * 4小时/天 = 448小时
+                    total_learning_time = 4 * 4 * 7 * 4  # 448小时
+                
+                if learning_time and total_learning_time > 0:
+                    # 学习时间除以总学习时间，再乘以100作为成本
+                    time_cost = min(100, (learning_time / total_learning_time) * 100)
+                else:
+                    # 无学习时间信息，使用默认成本
+                    time_cost = 70
+                
+                # 5. 金钱成本（权重：0.1）
+                # 学习资源的金钱除以总金钱
+                price = None
+                if len(res) > 8:
+                    try:
+                        if res[8]:
+                            price = float(res[8])
+                    except (ValueError, TypeError):
+                        pass
+                
+                # 总金钱预算
+                total_money = money_budget if money_budget > 0 else 1000  # 默认总预算1000元
+                
+                if price:
+                    # 价格除以总金钱，再乘以100作为成本
+                    price_cost = min(100, (price / total_money) * 100)
+                else:
+                    # 无价格信息，使用默认成本
+                    price_cost = 70
+                
+                # 计算综合成本（权重分配）
+                total_cost = (
+                    relevance_cost * 0.3 +
+                    format_cost * 0.2 +
+                    goal_cost * 0.25 +
+                    time_cost * 0.15 +
+                    price_cost * 0.1
+                )
+                
+                # 保留两位小数
+                total_cost = round(total_cost, 2)
+                relevance_cost = round(relevance_cost, 2)
+                format_cost = round(format_cost, 2)
+                goal_cost = round(goal_cost, 2)
+                time_cost = round(time_cost, 2)
+                price_cost = round(price_cost, 2)
+                
+                # 返回总成本和各项成本
+                return total_cost, relevance_cost, format_cost, goal_cost, time_cost, price_cost
             
             # 过滤并排序资源
             candidate_resources = []
@@ -1266,11 +1463,9 @@ class PathPlanner:
                     
                     candidate_resources.append(res)
             
-            # 按评分排序
-            candidate_resources.sort(key=score_resource, reverse=True)
+            # 按成本排序（成本越低越好）
+            candidate_resources.sort(key=lambda x: score_resource(x)[0])
             
-            # 综合考虑学习时间和金钱成本，选择最优的3个资源
-            # 对于所有目标，我们需要选择对用户损失最小的资源组合
             # 对资源进行去重处理
             seen_resource_ids = set()
             unique_resources = []
@@ -1280,74 +1475,8 @@ class PathPlanner:
                     seen_resource_ids.add(resource_id)
                     unique_resources.append(resource)
             
-            # 计算每个资源的成本得分，并保存详细信息
-            resources_with_cost = []
-            for resource in unique_resources:
-                # 计算详细成本信息
-                learning_time = None
-                # 尝试获取learning_time，根据资源元组的实际结构
-                # 首先尝试索引7（learning_time在索引7的位置）
-                if len(resource) > 7 and resource[7]:
-                    try:
-                        learning_time = float(resource[7])
-                    except (ValueError, TypeError):
-                        pass
-                # 如果索引7失败，尝试索引6
-                if learning_time is None and len(resource) > 6 and resource[6]:
-                    try:
-                        learning_time = float(resource[6])
-                    except (ValueError, TypeError):
-                        pass
-                # 如果索引6失败，尝试索引8
-                if learning_time is None and len(resource) > 8 and resource[8]:
-                    try:
-                        learning_time = float(resource[8])
-                    except (ValueError, TypeError):
-                        pass
-                
-                # 为每个资源生成一个50-100之间的随机价格
-                import random
-                price = random.randint(50, 100)
-                
-                # 更新resource表中的price字段
-                conn = sqlite3.connect(self.db_path)
-                cursor = conn.cursor()
-                cursor.execute('''
-                    UPDATE resources SET price = ? WHERE id = ?
-                ''', (price, resource[0]))
-                conn.commit()
-                conn.close()
-                
-                # 暂时不计算帮助得分
-                help_score = 0
-                
-                # 计算时间成本和金钱成本
-                # 时间成本：基于用户的时间预算，计算资源学习时间占总时间预算的比例
-                time_cost = (learning_time / time_budget * 100) if learning_time and time_budget else 0
-                # 金钱成本：基于用户的金钱预算，计算资源价格占总金钱预算的比例
-                money_cost = (price / money_budget * 100) if price and money_budget else 0
-                
-                # 计算总成本得分（重新设计的得分方式）
-                # 新的得分方式：
-                # 1. 时间成本：基于用户的时间预算，计算资源学习时间占总时间预算的比例
-                # 2. 金钱成本：基于用户的金钱预算，计算资源价格占总金钱预算的比例
-                # 3. 帮助得分：基于资源对学习目标的帮助程度
-                # 4. 综合得分：(时间成本 * 0.6 + 金钱成本 * 0.4) - help_score
-                # 得分越低越好
-                total_score = (time_cost * 0.6 + money_cost * 0.4) - help_score
-                
-                # 保留两位小数
-                total_score = round(total_score, 2)
-                time_cost = round(time_cost, 2)
-                money_cost = round(money_cost, 2)
-                help_score = round(help_score, 2)
-                
-                resources_with_cost.append((resource, total_score, time_cost, money_cost, help_score))
-            
-            # 按成本得分排序（得分越低越好）
-            resources_with_cost.sort(key=lambda x: x[1])
-            # 选择成本最低的3个资源
-            filtered_resources = [resource for resource, score, time_cost, money_cost, help_score in resources_with_cost[:limit]]
+            # 选择评分最高的3个资源
+            filtered_resources = unique_resources[:limit]
             
             # 将得分信息插入到数据库
             import uuid
@@ -1358,18 +1487,36 @@ class PathPlanner:
             recommendation_id = str(uuid.uuid4())
             
             # 插入得分信息
-            for resource, score, time_cost, money_cost, help_score in resources_with_cost:
+            for resource in filtered_resources:
                 resource_id = resource[0]
                 resource_name = resource[1] if len(resource) >= 2 else 'Unknown'
+                # 计算资源的综合成本和各项成本
+                total_cost, relevance_cost, format_cost, goal_cost, time_cost_value, price_cost_value = score_resource(resource)
                 # 格式化为两位小数
-                score_str = f"{score:.2f}"
+                cost_str = f"{total_cost:.2f}"
+                # 尝试获取学习时间和价格
+                learning_time = None
+                if len(resource) > 6 and resource[6]:
+                    try:
+                        learning_time = float(resource[6])
+                    except (ValueError, TypeError):
+                        pass
+                price = None
+                if len(resource) > 8 and resource[8]:
+                    try:
+                        price = float(resource[8])
+                    except (ValueError, TypeError):
+                        pass
+                # 计算时间成本和金钱成本
+                time_cost = (learning_time / time_budget * 100) if learning_time and time_budget else 0
+                money_cost = (price / money_budget * 100) if price and money_budget else 0
                 time_cost_str = f"{time_cost:.2f}"
                 money_cost_str = f"{money_cost:.2f}"
-                help_score_str = f"{help_score:.2f}"
+                help_score_str = "0.00"  # 暂时不计算帮助得分
                 cursor.execute('''
-                    INSERT INTO recommendation_scores (recommendation_id, resource_id, resource_name, score, time_cost, money_cost, help_score)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
-                ''', (recommendation_id, resource_id, resource_name, score_str, time_cost_str, money_cost_str, help_score_str))
+                    INSERT INTO recommendation_scores (recommendation_id, resource_id, resource_name, score, relevance_cost, format_cost, goal_cost, time_cost, price_cost)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ''', (recommendation_id, resource_id, resource_name, cost_str, relevance_cost, format_cost, goal_cost, time_cost_value, price_cost_value))
             
             conn.commit()
             conn.close()
@@ -1449,8 +1596,18 @@ class PathPlanner:
                             except (ValueError, TypeError):
                                 pass
                         
-                        # 金钱成本暂时设为0，因为resources表中没有价格字段
-                        price = 0
+                        # 为每个资源生成一个50-100之间的随机价格
+                        import random
+                        price = random.randint(50, 100)
+                        
+                        # 更新resource表中的price字段
+                        conn = sqlite3.connect(self.db_path)
+                        cursor = conn.cursor()
+                        cursor.execute('''
+                            UPDATE resources SET price = ? WHERE id = ?
+                        ''', (price, resource[0]))
+                        conn.commit()
+                        conn.close()
                         
                         # 暂时不计算帮助得分
                         help_score = 0
@@ -1487,7 +1644,6 @@ class PathPlanner:
                     filtered_resources.extend(selected_additional_resources)
                     
                     # 将得分信息插入到数据库
-                    import uuid
                     conn = sqlite3.connect(self.db_path)
                     cursor = conn.cursor()
                     
