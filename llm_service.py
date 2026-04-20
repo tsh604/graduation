@@ -162,6 +162,41 @@ class ZhipuLLMService:
             if kp in text_lower:
                 found.append(kp)
         return found if found else ["编程"]
+    
+    def evaluate_relevance(self, resource_content, topic):
+        """评估资源与主题的相关性，返回0-100的分数"""
+        if self.use_simple:
+            # 简化版：基于关键词匹配
+            resource_lower = resource_content.lower()
+            topic_lower = topic.lower()
+            if topic_lower in resource_lower:
+                return 80
+            return 30
+        
+        prompt = f"""
+        请评估以下学习资源与主题 '{topic}' 的相关性，返回一个0-100的数字，其中：
+        - 100表示完全相关
+        - 0表示完全不相关
+        
+        资源内容：
+        {resource_content}
+        
+        只返回一个数字，不要有任何其他文字。
+        """
+        
+        try:
+            result = self.chat(prompt)
+            # 提取数字
+            import re
+            numbers = re.findall(r'\d+', result)
+            if numbers:
+                score = int(numbers[0])
+                # 确保在0-100范围内
+                return max(0, min(100, score))
+            return 50  # 默认值
+        except Exception as e:
+            print(f"评估相关性时出错: {e}")
+            return 50  # 出错时返回默认值
 
 if __name__ == '__main__':
     print("="*50)

@@ -5,6 +5,10 @@
 from knowledge_graph import knowledge_graph
 import sqlite3
 import random
+from llm_service import ZhipuLLMService
+
+# 初始化大模型服务
+llm_service = ZhipuLLMService()
 
 class PathPlanner:
     def __init__(self, db_path='data/learning.db'):
@@ -848,17 +852,17 @@ class PathPlanner:
 
                 
                 # 对于数学相关主题，获取数学基础资源
-                if '数学' in topic_name or '代数' in topic_name or '微积分' in topic_name:
-                    cursor.execute('''
-                    SELECT * FROM resources 
-                    WHERE difficulty = ? 
-                    AND (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?)
-                    LIMIT ?
-                ''', (level or '初级', '%数学%', '%统计%', '%数学%', limit * 3))
+            if not resources and ('数学' in topic_name or '代数' in topic_name or '微积分' in topic_name):
+                cursor.execute('''
+                SELECT * FROM resources 
+                WHERE difficulty = ? 
+                AND (knowledge_point LIKE ? OR description LIKE ? OR title LIKE ?)
+                LIMIT ?
+            ''', (level or '初级', '%数学%', '%统计%', '%数学%', limit * 3))
                 resources = cursor.fetchall()
             
             # 对于前端开发相关主题，获取前端相关资源
-            if '前端' in topic or 'HTML' in topic or 'CSS' in topic or 'JavaScript' in topic:
+            if not resources and ('前端' in topic or 'HTML' in topic or 'CSS' in topic or 'JavaScript' in topic):
                 cursor.execute('''
                     SELECT * FROM resources 
                     WHERE difficulty = ? 
@@ -1004,29 +1008,6 @@ class PathPlanner:
             # 3. 学习目标相关度（权重0.25）
             # 4. 时间成本（权重0.15）
             # 5. 金钱成本（权重0.1）
-            # 模拟大模型调用，获取相关性程度
-            def get_relevance_score(text, topic):
-                # 这里是模拟大模型的实现，实际项目中可以替换为真实的大模型调用
-                # 基于关键词匹配来模拟相关性计算
-                text_lower = text.lower()
-                topic_lower = topic.lower()
-                
-                # 检查主题在文本中出现的次数
-                topic_count = text_lower.count(topic_lower)
-                
-                # 检查相关关键词的数量
-                related_keywords = [topic_lower, '编程', '代码', '开发', '学习', '教程', '课程']
-                keyword_count = sum(1 for keyword in related_keywords if keyword in text_lower)
-                
-                # 计算相关性分数（0-100）
-                score = 0
-                if topic_count > 0:
-                    score = 70 + min(topic_count * 10, 30)  # 主题出现至少70分，最多100分
-                elif keyword_count > 0:
-                    score = min(keyword_count * 20, 60)  # 相关关键词最多60分
-                
-                return score
-            
             def score_resource(res):
                 # 初始化各项成本（成本越低越好）
                 relevance_cost = 100  # 主题相关性成本（默认最高成本）
@@ -1044,7 +1025,7 @@ class PathPlanner:
                 resource_text_lower = resource_text.lower()
                 
                 # 1. 主题相关性成本（权重：0.3）
-                # 调用大模型获取相关性程度（0-100%），然后用100减去这个值作为成本
+                # 使用大模型获取相关性程度（0-100%），然后用100减去这个值作为成本
                 current_topic = 'Python' if 'Python' in topic else topic  # 使用当前主题作为关键词
                 
                 # 对于编程基础阶段，使用更广泛的关键词
@@ -1065,8 +1046,8 @@ class PathPlanner:
                         # 没有匹配的关键词，使用较低的相关性分数
                         relevance_score = 20
                 else:
-                    # 使用默认的相关性计算
-                    relevance_score = get_relevance_score(resource_text, current_topic)
+                    # 使用大模型计算与主题的相关性
+                    relevance_score = llm_service.evaluate_relevance(resource_text, current_topic)
                 
                 relevance_cost = 100 - relevance_score
                 
@@ -1084,7 +1065,7 @@ class PathPlanner:
                 
                 # 3. 学习目标相关成本（权重：0.25）
                 # 与学习目标相关度越高，成本越低
-                # 调用大模型获取相关性程度（0-100%），然后用100减去这个值作为成本
+                # 使用大模型获取相关性程度（0-100%），然后用100减去这个值作为成本
                 goal_text = ''
                 if goal == '找工作':
                     goal_text = '面试 就业 项目 简历 offer 求职 技术栈 算法 数据结构 系统设计 职业发展'
@@ -1093,7 +1074,8 @@ class PathPlanner:
                 elif goal == '项目开发':
                     goal_text = '项目 实战 开发 案例 应用 构建 实现 工程 部署 架构 编程 编码 调试 测试'
                 
-                goal_relevance_score = get_relevance_score(resource_text, goal_text)
+                # 使用大模型计算与学习目标的相关性
+                goal_relevance_score = llm_service.evaluate_relevance(resource_text, goal_text)
                 goal_cost = 100 - goal_relevance_score
                 
                 # 4. 时间成本（权重：0.15）
@@ -1135,7 +1117,7 @@ class PathPlanner:
                         pass
                 
                 # 总金钱预算
-                total_money = money_budget if money_budget > 0 else 1000  # 默认总预算1000元
+                total_money = money_budget if money_budget is not None and money_budget > 0 else 1000  # 默认总预算1000元
                 
                 if price:
                     # 价格除以总金钱，再乘以100作为成本
@@ -1164,12 +1146,11 @@ class PathPlanner:
                 # 返回总成本和各项成本
                 return total_cost, relevance_cost, format_cost, goal_cost, time_cost, price_cost
             
-            # 对Python资源进行排序，优先推荐学习成本低的资源
-            # 按成本排序（成本越低越好）
-            python_resources.sort(key=lambda x: score_resource(x)[0])
-            
-            # 优先使用Python相关资源
+            # 合并所有资源
             candidate_resources = python_resources + other_resources
+            
+            # 对所有资源按成本排序（成本越低越好）
+            candidate_resources.sort(key=lambda x: score_resource(x)[0])
             
             # 对资源进行去重处理
             seen_resource_ids = set()
@@ -1180,8 +1161,8 @@ class PathPlanner:
                     seen_resource_ids.add(resource_id)
                     unique_resources.append(resource)
             
-            # 选择评分最高的3个资源
-            filtered_resources = unique_resources[:limit]
+            # 选择成本最低的3个资源
+            filtered_resources = unique_resources[:3]  # 只推荐前三个资源
             
             # 将得分信息插入到数据库
             import uuid
@@ -1191,14 +1172,14 @@ class PathPlanner:
             # 生成推荐ID
             recommendation_id = str(uuid.uuid4())
             
-            # 插入得分信息
-            for resource in filtered_resources:
+            # 插入所有计算过成本的资源得分信息
+            for resource in candidate_resources:
                 resource_id = resource[0]
                 resource_name = resource[1] if len(resource) >= 2 else 'Unknown'
                 # 计算资源的综合成本和各项成本
                 total_cost, relevance_cost, format_cost, goal_cost, time_cost_value, price_cost_value = score_resource(resource)
-                # 格式化为两位小数
-                cost_str = f"{total_cost:.2f}"
+                # 保留两位小数
+                total_cost = round(total_cost, 2)
                 # 尝试获取学习时间和价格
                 learning_time = None
                 if len(resource) > 6 and resource[6]:
@@ -1221,7 +1202,7 @@ class PathPlanner:
                 cursor.execute('''
                     INSERT INTO recommendation_scores (recommendation_id, resource_id, resource_name, score, relevance_cost, format_cost, goal_cost, time_cost, price_cost)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ''', (recommendation_id, resource_id, resource_name, cost_str, relevance_cost, format_cost, goal_cost, time_cost_value, price_cost_value))
+                ''', (recommendation_id, resource_id, resource_name, total_cost, relevance_cost, format_cost, goal_cost, time_cost_value, price_cost_value))
             
             conn.commit()
             conn.close()
@@ -1279,8 +1260,12 @@ class PathPlanner:
                     relevance_cost = 100 - relevance_score
                 else:
                     # 相关性越高，成本越低
-                    if topic_name in resource_text:
-                        relevance_cost = 20  # 直接包含主题名称，成本最低
+                    # 优先检查knowledge_point字段（索引3）
+                    knowledge_point = res[3] if len(res) > 3 else ''
+                    if topic_name in knowledge_point:
+                        relevance_cost = 10  # knowledge_point匹配，成本最低
+                    elif topic_name in resource_text:
+                        relevance_cost = 20  # 直接包含主题名称，成本较低
                     else:
                         # 检查资源文本中包含主题相关关键词的数量
                         topic_related_keywords = topic_name.split()
@@ -1317,30 +1302,8 @@ class PathPlanner:
                 elif goal == '项目开发':
                     goal_text = '项目 实战 开发 案例 应用 构建 实现 工程 部署 架构 编程 编码 调试 测试'
                 
-                # 模拟大模型调用，获取相关性程度
-                def get_relevance_score(text, topic):
-                    # 这里是模拟大模型的实现，实际项目中可以替换为真实的大模型调用
-                    # 基于关键词匹配来模拟相关性计算
-                    text_lower = text.lower()
-                    topic_lower = topic.lower()
-                    
-                    # 检查主题在文本中出现的次数
-                    topic_count = text_lower.count(topic_lower)
-                    
-                    # 检查相关关键词的数量
-                    related_keywords = [topic_lower, '编程', '代码', '开发', '学习', '教程', '课程']
-                    keyword_count = sum(1 for keyword in related_keywords if keyword in text_lower)
-                    
-                    # 计算相关性分数（0-100）
-                    score = 0
-                    if topic_count > 0:
-                        score = 70 + min(topic_count * 10, 30)  # 主题出现至少70分，最多100分
-                    elif keyword_count > 0:
-                        score = min(keyword_count * 20, 60)  # 相关关键词最多60分
-                    
-                    return score
-                
-                goal_relevance_score = get_relevance_score(resource_text, goal_text)
+                # 使用大模型计算与学习目标的相关性
+                goal_relevance_score = llm_service.evaluate_relevance(resource_text, goal_text)
                 goal_cost = 100 - goal_relevance_score
                 
                 # 4. 时间成本（权重：0.15）
@@ -1382,7 +1345,7 @@ class PathPlanner:
                         pass
                 
                 # 总金钱预算
-                total_money = money_budget if money_budget > 0 else 1000  # 默认总预算1000元
+                total_money = money_budget if money_budget is not None and money_budget > 0 else 1000  # 默认总预算1000元
                 
                 if price:
                     # 价格除以总金钱，再乘以100作为成本
@@ -1422,9 +1385,8 @@ class PathPlanner:
                         # 对于初级用户，只推荐初级资源
                         if level == '初级' and res[4] != '初级':
                             continue
-                        # 对于中级用户，推荐初级和中级资源
-                        elif level == '中级' and res[4] == '高级':
-                            continue
+                        # 对于中级用户，推荐初级、中级和部分高级资源（放宽限制）
+                        # 移除对高级资源的过滤，让中级用户也能看到高级资源
                         # 对于高级用户，推荐所有级别资源
                     
                     # 检查资源是否与主题相关
@@ -1458,6 +1420,14 @@ class PathPlanner:
                         has_data_keyword = any(keyword in resource_text.lower() for keyword in data_keywords)
                         if not has_data_keyword:
                             continue
+                    # 对于Java主题，只推荐与Java相关的资源
+                    elif topic_name == 'Java':
+                        java_keywords = ['java', 'spring', 'maven', 'gradle', 'hibernate', 'mybatis', 'jvm', '并发', '网络编程', '设计模式', '单元测试', '性能调优']
+                        has_java_keyword = any(keyword in resource_text.lower() for keyword in java_keywords)
+                        # 同时确保knowledge_point字段包含Java
+                        knowledge_point = res[3] if len(res) > 3 else ''
+                        if not has_java_keyword and 'Java' not in knowledge_point:
+                            continue
                     
                     candidate_resources.append(res)
             
@@ -1473,8 +1443,8 @@ class PathPlanner:
                     seen_resource_ids.add(resource_id)
                     unique_resources.append(resource)
             
-            # 选择评分最高的3个资源
-            filtered_resources = unique_resources[:limit]
+            # 选择评分最高的资源，按照用户要求只推荐前三个
+            filtered_resources = unique_resources[:3]  # 只推荐前三个资源
             
             # 将得分信息插入到数据库
             import uuid
@@ -1484,14 +1454,14 @@ class PathPlanner:
             # 生成推荐ID
             recommendation_id = str(uuid.uuid4())
             
-            # 插入得分信息
-            for resource in filtered_resources:
+            # 插入所有计算过成本的资源得分信息
+            for resource in candidate_resources:
                 resource_id = resource[0]
                 resource_name = resource[1] if len(resource) >= 2 else 'Unknown'
                 # 计算资源的综合成本和各项成本
                 total_cost, relevance_cost, format_cost, goal_cost, time_cost_value, price_cost_value = score_resource(resource)
-                # 格式化为两位小数
-                cost_str = f"{total_cost:.2f}"
+                # 保留两位小数
+                total_cost = round(total_cost, 2)
                 # 尝试获取学习时间和价格
                 learning_time = None
                 if len(resource) > 6 and resource[6]:
@@ -1514,7 +1484,7 @@ class PathPlanner:
                 cursor.execute('''
                     INSERT INTO recommendation_scores (recommendation_id, resource_id, resource_name, score, relevance_cost, format_cost, goal_cost, time_cost, price_cost)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ''', (recommendation_id, resource_id, resource_name, cost_str, relevance_cost, format_cost, goal_cost, time_cost_value, price_cost_value))
+                ''', (recommendation_id, resource_id, resource_name, total_cost, relevance_cost, format_cost, goal_cost, time_cost_value, price_cost_value))
             
             conn.commit()
             conn.close()
