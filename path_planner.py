@@ -1161,8 +1161,35 @@ class PathPlanner:
                     seen_resource_ids.add(resource_id)
                     unique_resources.append(resource)
             
+            # 过滤出与Python相关的资源，并计算成本
+            python_related_with_cost = []
+            seen_python_ids = set()
+            for resource in unique_resources:
+                resource_text = ''
+                if len(resource) >= 2:
+                    resource_text += resource[1]  # 标题
+                if len(resource) >= 5:
+                    resource_text += ' ' + resource[4]  # 知识点
+                if len(resource) >= 6:
+                    resource_text += ' ' + resource[5]  # 描述
+                
+                # 检查是否与Python相关
+                if ('python' in resource_text.lower() or 'Python' in resource_text) and resource[0] not in seen_python_ids:
+                    # 计算成本
+                    total_cost, _, _, _, _, _ = score_resource(resource)
+                    python_related_with_cost.append((resource, total_cost))
+                    seen_python_ids.add(resource[0])
+            
+            # 按成本排序
+            python_related_with_cost.sort(key=lambda x: x[1])
+            
+            # 提取排序后的资源
+            python_related_unique = [item[0] for item in python_related_with_cost]
+            
             # 选择成本最低的3个资源
-            filtered_resources = unique_resources[:3]  # 只推荐前三个资源
+            filtered_resources = python_related_unique[:3]  # 只推荐前三个资源
+            
+
             
             # 将得分信息插入到数据库
             import uuid
@@ -1172,39 +1199,36 @@ class PathPlanner:
             # 生成推荐ID
             recommendation_id = str(uuid.uuid4())
             
-            # 插入所有计算过成本的资源得分信息
-            for resource in candidate_resources:
-                resource_id = resource[0]
-                resource_name = resource[1] if len(resource) >= 2 else 'Unknown'
-                # 计算资源的综合成本和各项成本
-                total_cost, relevance_cost, format_cost, goal_cost, time_cost_value, price_cost_value = score_resource(resource)
-                # 保留两位小数
-                total_cost = round(total_cost, 2)
-                # 尝试获取学习时间和价格
-                learning_time = None
-                if len(resource) > 6 and resource[6]:
+            # 插入Python资源的得分信息
+            if python_related_with_cost:
+                for resource, total_cost in python_related_with_cost:
+                    resource_id = resource[0]
+                    resource_name = resource[1] if len(resource) >= 2 else 'Unknown'
+                    # 计算资源的各项成本
+                    _, relevance_cost, format_cost, goal_cost, time_cost_value, price_cost_value = score_resource(resource)
+                    # 保留两位小数
+                    total_cost = round(total_cost, 2)
+                    relevance_cost = round(relevance_cost, 2)
+                    format_cost = round(format_cost, 2)
+                    goal_cost = round(goal_cost, 2)
+                    time_cost_value = round(time_cost_value, 2)
+                    price_cost_value = round(price_cost_value, 2)
+                    
                     try:
-                        learning_time = float(resource[6])
-                    except (ValueError, TypeError):
+                        cursor.execute('''
+                            INSERT INTO recommendation_scores (recommendation_id, resource_id, resource_name, score, relevance_cost, format_cost, goal_cost, time_cost, price_cost)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        ''', (recommendation_id, resource_id, resource_name, total_cost, relevance_cost, format_cost, goal_cost, time_cost_value, price_cost_value))
+                    except Exception as e:
                         pass
-                price = None
-                if len(resource) > 8 and resource[8]:
-                    try:
-                        price = float(resource[8])
-                    except (ValueError, TypeError):
-                        pass
-                # 计算时间成本和金钱成本
-                time_cost = (learning_time / time_budget * 100) if learning_time and time_budget else 0
-                money_cost = (price / money_budget * 100) if price and money_budget else 0
-                time_cost_str = f"{time_cost:.2f}"
-                money_cost_str = f"{money_cost:.2f}"
-                help_score_str = "0.00"  # 暂时不计算帮助得分
-                cursor.execute('''
-                    INSERT INTO recommendation_scores (recommendation_id, resource_id, resource_name, score, relevance_cost, format_cost, goal_cost, time_cost, price_cost)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ''', (recommendation_id, resource_id, resource_name, total_cost, relevance_cost, format_cost, goal_cost, time_cost_value, price_cost_value))
+                
+                try:
+                    conn.commit()
+                except Exception as e:
+                    pass
+            else:
+                pass
             
-            conn.commit()
             conn.close()
         else:
             # 对于非Python主题，使用统一逻辑
@@ -1431,20 +1455,31 @@ class PathPlanner:
                     
                     candidate_resources.append(res)
             
-            # 按成本排序（成本越低越好）
-            candidate_resources.sort(key=lambda x: score_resource(x)[0])
-            
-            # 对资源进行去重处理
-            seen_resource_ids = set()
-            unique_resources = []
+            # 计算每个资源的成本并存储
+            resources_with_cost = []
             for resource in candidate_resources:
+                total_cost = score_resource(resource)[0]
+                resources_with_cost.append((resource, total_cost))
+            
+            # 按成本排序（成本越低越好）
+            resources_with_cost.sort(key=lambda x: x[1])
+            
+            # 对资源进行去重处理，保持排序顺序
+            seen_resource_ids = set()
+            unique_resources_with_cost = []
+            for resource, cost in resources_with_cost:
                 resource_id = resource[0]
                 if resource_id not in seen_resource_ids:
                     seen_resource_ids.add(resource_id)
-                    unique_resources.append(resource)
+                    unique_resources_with_cost.append((resource, cost))
             
-            # 选择评分最高的资源，按照用户要求只推荐前三个
+            # 提取排序后的资源
+            unique_resources = [item[0] for item in unique_resources_with_cost]
+            
+            # 选择成本最低的3个资源
             filtered_resources = unique_resources[:3]  # 只推荐前三个资源
+            
+
             
             # 将得分信息插入到数据库
             import uuid
@@ -1454,14 +1489,19 @@ class PathPlanner:
             # 生成推荐ID
             recommendation_id = str(uuid.uuid4())
             
-            # 插入所有计算过成本的资源得分信息
-            for resource in candidate_resources:
+            # 插入所有计算过成本的资源得分信息，使用与排序时相同的成本值
+            for resource, total_cost in resources_with_cost:
                 resource_id = resource[0]
                 resource_name = resource[1] if len(resource) >= 2 else 'Unknown'
-                # 计算资源的综合成本和各项成本
-                total_cost, relevance_cost, format_cost, goal_cost, time_cost_value, price_cost_value = score_resource(resource)
+                # 计算资源的各项成本
+                _, relevance_cost, format_cost, goal_cost, time_cost_value, price_cost_value = score_resource(resource)
                 # 保留两位小数
                 total_cost = round(total_cost, 2)
+                relevance_cost = round(relevance_cost, 2)
+                format_cost = round(format_cost, 2)
+                goal_cost = round(goal_cost, 2)
+                time_cost_value = round(time_cost_value, 2)
+                price_cost_value = round(price_cost_value, 2)
                 # 尝试获取学习时间和价格
                 learning_time = None
                 if len(resource) > 6 and resource[6]:
