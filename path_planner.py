@@ -1071,17 +1071,16 @@ class PathPlanner:
                 relevance_cost = 100 - relevance_score
                 
                 # 2. 课程形式成本（权重：0.2）
-                # 视频 > 课程/教程 > 文章
-                if '视频' in title_lower or 'video' in title_lower:
-                    format_cost = 20  # 视频形式成本最低
-                elif '课程' in title_lower or '教程' in title_lower:
-                    format_cost = 40  # 课程形式成本次之
-                elif '文章' in title_lower or 'blog' in title_lower or 'article' in title_lower:
-                    format_cost = 60  # 文章形式成本较高
-                elif '书籍' in title_lower or 'book' in title_lower:
-                    format_cost = 30  # 书籍形式成本较低
+                # 根据resources表中的type字段判断
+                resource_type = res[2] if len(res) > 2 else ''
+                if resource_type == '视频':
+                    format_cost = 5  # 视频形式成本最低
+                elif resource_type == '课程':
+                    format_cost = 10  # 课程形式成本次之
+                elif resource_type in ['书籍', '文章']:
+                    format_cost = 15  # 书籍或文章形式成本较高
                 else:
-                    format_cost = 80  # 其他形式成本最高
+                    format_cost = 20  # 其他形式成本
                 
                 # 3. 学习目标相关成本（权重：0.25）
                 # 与学习目标相关度越高，成本越低
@@ -1297,17 +1296,16 @@ class PathPlanner:
                             relevance_cost = 80
                 
                 # 2. 课程形式成本（权重：0.2）
-                # 视频 > 课程/教程 > 文章
-                if '视频' in title_lower or 'video' in title_lower:
-                    format_cost = 20  # 视频形式成本最低
-                elif '课程' in title_lower or '教程' in title_lower:
-                    format_cost = 40  # 课程形式成本次之
-                elif '文章' in title_lower or 'blog' in title_lower or 'article' in title_lower:
-                    format_cost = 60  # 文章形式成本较高
-                elif '书籍' in title_lower or 'book' in title_lower:
-                    format_cost = 30  # 书籍形式成本较低
+                # 根据resources表中的type字段判断
+                resource_type = res[2] if len(res) > 2 else ''
+                if resource_type == '视频':
+                    format_cost = 5  # 视频形式成本最低
+                elif resource_type == '课程':
+                    format_cost = 10  # 课程形式成本次之
+                elif resource_type in ['书籍', '文章']:
+                    format_cost = 15  # 书籍或文章形式成本较高
                 else:
-                    format_cost = 80  # 其他形式成本最高
+                    format_cost = 20  # 其他形式成本
                 
                 # 3. 学习目标相关成本（权重：0.25）
                 # 与学习目标相关度越高，成本越低
