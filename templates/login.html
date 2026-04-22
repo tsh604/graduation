@@ -1,0 +1,174 @@
+<!-- templates/login.html -->
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <title>用户登录 - 智学推荐</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/login.css') }}">
+</head>
+<body>
+    <div class="login-container">
+        <div class="login-card">
+            <div class="logo-section">
+                <div class="logo">
+                    <span>📘</span>
+                </div>
+                <h1>智学推荐 · LearnWise</h1>
+                <p>大模型驱动的对话式学习助手</p>
+            </div>
+            
+            <div class="form-section">
+                <h2>用户登录</h2>
+                <form id="login-form">
+                    <div class="form-group">
+                        <label for="email">邮箱</label>
+                        <input type="email" id="email" placeholder="请输入邮箱" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="password">密码</label>
+                        <input type="password" id="password" placeholder="请输入密码" required>
+                    </div>
+                    <button type="submit" class="login-btn">登录</button>
+                </form>
+                <div id="login-message" class="message"></div>
+                <div class="register-link">
+                    还没有账号？ <a href="#" onclick="showRegisterModal()">立即注册</a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 注册模态框 -->
+    <div id="register-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>用户注册</h2>
+                <button class="close-btn" onclick="closeRegisterModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="register-form">
+                    <div class="form-group">
+                        <label for="register-username">用户名</label>
+                        <input type="text" id="register-username" placeholder="请输入用户名" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="register-email">邮箱</label>
+                        <input type="email" id="register-email" placeholder="请输入邮箱" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="register-password">密码</label>
+                        <input type="password" id="register-password" placeholder="请输入密码" required>
+                    </div>
+                    <div class="form-actions">
+                        <button type="button" class="cancel-btn" onclick="closeRegisterModal()">取消</button>
+                        <button type="submit" class="submit-btn">注册</button>
+                    </div>
+                </form>
+                <div id="register-message" class="message"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 显示注册模态框
+        function showRegisterModal() {
+            document.getElementById('register-modal').style.display = 'block';
+        }
+
+        // 关闭注册模态框
+        function closeRegisterModal() {
+            document.getElementById('register-modal').style.display = 'none';
+            document.getElementById('register-message').textContent = '';
+        }
+
+        // 登录表单提交
+        document.getElementById('login-form').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            const messageDiv = document.getElementById('login-message');
+
+            messageDiv.textContent = '登录中...';
+            
+            fetch('/login', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ email, password })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    messageDiv.textContent = data.message;
+                    messageDiv.style.color = 'green';
+                    setTimeout(() => {
+                        window.location.href = '/';
+                    }, 1000);
+                } else {
+                    messageDiv.textContent = data.message;
+                    messageDiv.style.color = 'red';
+                }
+            })
+            .catch(error => {
+                messageDiv.textContent = '登录失败，请重试';
+                messageDiv.style.color = 'red';
+                console.error('Error:', error);
+            });
+        });
+
+        // 注册表单提交
+        document.getElementById('register-form').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const username = document.getElementById('register-username').value;
+            const email = document.getElementById('register-email').value;
+            const password = document.getElementById('register-password').value;
+            const messageDiv = document.getElementById('register-message');
+
+            messageDiv.textContent = '注册中...';
+            
+            fetch('/register', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ username, email, password })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    messageDiv.textContent = data.message;
+                    messageDiv.style.color = 'green';
+                    setTimeout(() => {
+                        closeRegisterModal();
+                        document.getElementById('login-message').textContent = '注册成功，请登录';
+                        document.getElementById('login-message').style.color = 'green';
+                    }, 1000);
+                } else {
+                    messageDiv.textContent = data.message;
+                    messageDiv.style.color = 'red';
+                }
+            })
+            .catch(error => {
+                messageDiv.textContent = '注册失败，请重试';
+                messageDiv.style.color = 'red';
+                console.error('Error:', error);
+            });
+        });
+
+        // 点击模态框外部关闭
+        window.onclick = function(event) {
+            const registerModal = document.getElementById('register-modal');
+            if (event.target == registerModal) {
+                closeRegisterModal();
+            }
+        }
+    </script>
+</body>
+</html>

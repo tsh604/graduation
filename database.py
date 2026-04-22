@@ -54,6 +54,17 @@ def init_database():
         )
     ''')
     
+    # 创建用户表
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT UNIQUE NOT NULL,
+            email TEXT UNIQUE NOT NULL,
+            password TEXT NOT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+    
     # 检查是否已有数据
     cursor.execute('SELECT COUNT(*) FROM resources')
     count = cursor.fetchone()[0]
@@ -370,6 +381,81 @@ def clear_user_dialogues():
     conn.commit()
     conn.close()
     print("对话历史已清空，ID已重置")
+
+# 用户相关函数
+def register_user(username, email, password):
+    """注册新用户"""
+    conn = sqlite3.connect('data/learning.db')
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute(
+            'INSERT INTO users (username, email, password) VALUES (?, ?, ?)',
+            (username, email, password)
+        )
+        conn.commit()
+        return True, "注册成功"
+    except sqlite3.IntegrityError as e:
+        if 'UNIQUE constraint failed: users.username' in str(e):
+            return False, "用户名已存在"
+        elif 'UNIQUE constraint failed: users.email' in str(e):
+            return False, "邮箱已被注册"
+        else:
+            return False, f"注册失败: {e}"
+    except Exception as e:
+        return False, f"注册失败: {e}"
+    finally:
+        conn.close()
+
+def verify_user(email, password):
+    """验证用户凭证"""
+    conn = sqlite3.connect('data/learning.db')
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute(
+            'SELECT id, username FROM users WHERE email = ? AND password = ?',
+            (email, password)
+        )
+        user = cursor.fetchone()
+        if user:
+            return True, user
+        else:
+            return False, "邮箱或密码错误"
+    except Exception as e:
+        return False, f"验证失败: {e}"
+    finally:
+        conn.close()
+
+def get_user_by_email(email):
+    """根据邮箱获取用户信息"""
+    conn = sqlite3.connect('data/learning.db')
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute('SELECT id, username, email FROM users WHERE email = ?', (email,))
+        user = cursor.fetchone()
+        return user
+    except Exception as e:
+        print(f"获取用户信息失败: {e}")
+        return None
+    finally:
+        conn.close()
+
+def get_user_by_id(user_id):
+    """根据ID获取用户信息"""
+    conn = sqlite3.connect('data/learning.db')
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute('SELECT id, username, email FROM users WHERE id = ?', (user_id,))
+        user = cursor.fetchone()
+        return user
+    except Exception as e:
+        print(f"获取用户信息失败: {e}")
+        return None
+    finally:
+        conn.close()
 
 
 if __name__ == '__main__':

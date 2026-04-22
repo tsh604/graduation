@@ -1,8 +1,8 @@
 # app.py
-from flask import Flask, render_template, request, jsonify, session
+from flask import Flask, render_template, request, jsonify, session, redirect, url_for
 import sqlite3
 import uuid
-from database import init_database, save_dialogue, clear_user_dialogues
+from database import init_database, save_dialogue, clear_user_dialogues, register_user, verify_user, get_user_by_email
 from recommender import Recommender
 from path_planner import generate_learning_plan, get_learning_efficiency_tips
 import json
@@ -51,7 +51,14 @@ def add_header(response):
 
 # 初始化各模块
 recommender = Recommender()
-llm = ZhipuLLMService()
+llm = None
+
+# 延迟初始化智谱AI服务
+def get_llm():
+    global llm
+    if llm is None:
+        llm = ZhipuLLMService()
+    return llm
 
 # 存储对话状态的字典
 dialogue_state = {}
@@ -176,7 +183,7 @@ class DialogueManager:
         # 如果没有匹配，可能是新主题，用大模型提取
         try:
             prompt = f"从这句话中提取他想学习的技术主题：'{message}'。只返回主题名称，如果没有明确主题返回'未知'。"
-            result = llm.chat(prompt)
+            result = get_llm().chat(prompt)
             # 检查结果是否是默认回复
             if result and result != "未知" and "我是一个学习助手" not in result:
                 return result
@@ -287,7 +294,7 @@ class DialogueManager:
             # 使用大模型搜索相关资源
             prompt = f"请为学习{topic}的{subtopic}提供3个高质量的学习资源，包括资源名称、类型（视频/课程/书籍/文章）、难度级别（初级/中级/高级）、URL链接和简短描述。格式为JSON数组，每个资源包含title、type、knowledge_point、difficulty、url、description字段。"
             
-            result = llm.chat(prompt)
+            result = get_llm().chat(prompt)
             
             # 检查结果是否是默认回复
             if "我是一个学习助手" in result:
@@ -550,7 +557,7 @@ class DialogueManager:
                     
                     语气要友好热情，用例子帮助理解。
                     """
-                result = llm.chat(prompt)
+                result = get_llm().chat(prompt)
                 # 检查结果是否是默认回复
                 if "我是一个学习助手" in result:
                     return f"抱歉，暂时无法解释{term}。你可以尝试学习其他内容，或者稍后再试。"
@@ -569,7 +576,7 @@ class DialogueManager:
                     
                     语气要友好热情，用例子帮助理解。
                     """
-                    explanation = llm.chat(prompt)
+                    explanation = get_llm().chat(prompt)
                     # 检查结果是否是默认回复
                     if "我是一个学习助手" not in explanation:
                         responses.append(f"## {term}\n\n{explanation}")
@@ -635,7 +642,7 @@ class DialogueManager:
             3. 实践项目建议
             4. 推荐的学习资源类型
             """
-            result = llm.chat(prompt)
+            result = get_llm().chat(prompt)
             # 检查结果是否是默认回复
             if "我是一个学习助手" in result:
                 return f"抱歉，暂时无法为{topic}提供学习方法建议。你可以尝试学习其他内容，或者稍后再试。"
@@ -648,7 +655,7 @@ class DialogueManager:
             用户问：{message}
             请解释这两个技术的区别和各自的应用场景，帮助用户做出选择。
             """
-            result = llm.chat(prompt)
+            result = get_llm().chat(prompt)
             # 检查结果是否是默认回复
             if "我是一个学习助手" in result:
                 return "抱歉，暂时无法提供对比信息。你可以尝试学习其他内容，或者稍后再试。"
@@ -667,7 +674,7 @@ class DialogueManager:
             2. 达到找工作水平需要多久
             3. 影响学习速度的因素
             """
-            result = llm.chat(prompt)
+            result = get_llm().chat(prompt)
             # 检查结果是否是默认回复
             if "我是一个学习助手" in result:
                 return f"抱歉，暂时无法为{topic}提供学习时间估计。你可以尝试学习其他内容，或者稍后再试。"
@@ -686,7 +693,7 @@ class DialogueManager:
             3. 市场需求如何
             4. 发展前景
             """
-            result = llm.chat(prompt)
+            result = get_llm().chat(prompt)
             # 检查结果是否是默认回复
             if "我是一个学习助手" in result:
                 return f"抱歉，暂时无法为{topic}提供就业前景信息。你可以尝试学习其他内容，或者稍后再试。"
@@ -702,7 +709,7 @@ class DialogueManager:
             2. 提供学习建议
             3. 保持对话的连贯性，不要重复问已经问过的问题
             """
-        result = llm.chat(prompt)
+        result = get_llm().chat(prompt)
         # 检查结果是否是默认回复
         if "我是一个学习助手" in result:
             return "抱歉，我没有理解你的问题。你可以尝试换一种方式表达，或者告诉我你想学习的具体内容。"
@@ -1006,16 +1013,10 @@ class DialogueManager:
 
 @app.route('/')
 def index():
-    """首页 - 聊天界面"""
-    # 每次访问首页时，清空旧的 session 数据
-    if 'user_id' in session:
-        old_user_id = session['user_id']
-        if old_user_id not in dialogue_state:
-            session.clear()
-    
-    # 生成新的user_id
-    if 'user_id' not in session:
-        session['user_id'] = str(uuid.uuid4())[:8]
+    """首页 - 聊天界面（需要登录）"""
+    # 检查用户是否登录
+    if 'user_id' not in session or 'username' not in session:
+        return redirect(url_for('login_page'))
     
     # 清空得分表，为新对话准备干净的数据
     conn = sqlite3.connect('data/learning.db')
@@ -1028,9 +1029,19 @@ def index():
     
     return render_template('index.html')
 
+@app.route('/login')
+def login_page():
+    """登录页面"""
+    if 'user_id' in session and 'username' in session:
+        return redirect(url_for('index'))
+    return render_template('login.html')
+
 @app.route('/chat', methods=['POST'])
 def chat():
-    """处理对话 - 实现多轮追问"""
+    """处理对话 - 实现多轮追问（需要登录）"""
+    if 'user_id' not in session or 'username' not in session:
+        return jsonify({'success': False, 'message': '未登录'}), 401
+        
     data = request.json
     user_message = data.get('message', '')
     user_id = session.get('user_id', 'unknown')
@@ -1057,7 +1068,10 @@ def chat():
 
 @app.route('/reset', methods=['POST'])
 def reset_conversation():
-    """重置对话 - 新对话功能"""
+    """重置对话 - 新对话功能（需要登录）"""
+    if 'user_id' not in session or 'username' not in session:
+        return jsonify({'success': False, 'message': '未登录'}), 401
+        
     user_id = session.get('user_id', 'unknown')
     
     # 清空对话状态
@@ -1074,7 +1088,10 @@ def reset_conversation():
 
 @app.route('/history', methods=['GET'])
 def get_history():
-    """获取对话历史"""
+    """获取对话历史（需要登录）"""
+    if 'user_id' not in session or 'username' not in session:
+        return jsonify({'success': False, 'message': '未登录'}), 401
+        
     user_id = session.get('user_id', 'unknown')
     
     if user_id not in dialogue_state:
@@ -1098,20 +1115,29 @@ def get_history():
 
 @app.route('/kg-data', methods=['GET'])
 def get_kg_data():
-    """返回知识图谱数据给前端"""
+    """返回知识图谱数据给前端（需要登录）"""
+    if 'user_id' not in session or 'username' not in session:
+        return jsonify({'success': False, 'message': '未登录'}), 401
+        
     from knowledge_graph import knowledge_graph
     return jsonify(knowledge_graph)
 
 @app.route('/domains', methods=['GET'])
 def get_domains():
-    """获取所有可用的学习领域"""
+    """获取所有可用的学习领域（需要登录）"""
+    if 'user_id' not in session or 'username' not in session:
+        return jsonify({'success': False, 'message': '未登录'}), 401
+        
     from knowledge_graph import knowledge_graph
     domains = list(knowledge_graph.keys())
     return jsonify({'domains': domains})
 
 @app.route('/search-resource', methods=['POST'])
 def search_resource():
-    """使用大模型搜索资源并添加到数据库"""
+    """使用大模型搜索资源并添加到数据库（需要登录）"""
+    if 'user_id' not in session or 'username' not in session:
+        return jsonify({'success': False, 'message': '未登录'}), 401
+        
     data = request.json
     topic = data.get('topic', '')
     subtopic = data.get('subtopic', '')
@@ -1123,7 +1149,7 @@ def search_resource():
         # 使用大模型搜索相关资源
         prompt = f"请为学习{topic}的{subtopic}提供3个高质量的学习资源，包括资源名称、类型（视频/课程/书籍/文章）、难度级别（初级/中级/高级）、URL链接和简短描述。格式为JSON数组，每个资源包含title、type、knowledge_point、difficulty、url、description字段。"
         
-        result = llm.chat(prompt)
+        result = get_llm().chat(prompt)
         
         # 检查结果是否是默认回复
         if "我是一个学习助手" in result:
@@ -1179,6 +1205,124 @@ def favicon():
     """处理favicon.ico请求，避免404错误"""
     # 返回一个空的响应，状态码204表示无内容
     return '', 204
+
+# 用户认证相关路由
+@app.route('/register', methods=['POST'])
+def register():
+    """用户注册"""
+    try:
+        data = request.get_json()
+        username = data.get('username')
+        email = data.get('email')
+        password = data.get('password')
+        
+        if not all([username, email, password]):
+            return jsonify({'success': False, 'message': '请填写所有必填字段'}), 400
+        
+        # 验证用户名和邮箱格式
+        if len(username) < 3:
+            return jsonify({'success': False, 'message': '用户名至少3个字符'}), 400
+        
+        if '@' not in email:
+            return jsonify({'success': False, 'message': '请输入有效的邮箱地址'}), 400
+        
+        if len(password) < 6:
+            return jsonify({'success': False, 'message': '密码至少6个字符'}), 400
+        
+        # 调用注册函数
+        success, message = register_user(username, email, password)
+        
+        if success:
+            return jsonify({'success': True, 'message': message}), 200
+        else:
+            return jsonify({'success': False, 'message': message}), 400
+            
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'注册失败: {str(e)}'}), 500
+
+@app.route('/login', methods=['POST'])
+def login():
+    """用户登录"""
+    try:
+        data = request.get_json()
+        email = data.get('email')
+        password = data.get('password')
+        
+        if not all([email, password]):
+            return jsonify({'success': False, 'message': '请填写邮箱和密码'}), 400
+        
+        # 调用验证函数
+        success, result = verify_user(email, password)
+        
+        if success:
+            # 登录成功，设置session
+            user_id, username = result
+            session['user_id'] = user_id
+            session['username'] = username
+            session['email'] = email
+            
+            return jsonify({
+                'success': True, 
+                'message': '登录成功',
+                'user': {
+                    'id': user_id,
+                    'username': username,
+                    'email': email
+                }
+            }), 200
+        else:
+            return jsonify({'success': False, 'message': result}), 401
+            
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'登录失败: {str(e)}'}), 500
+
+@app.route('/logout', methods=['POST'])
+def logout():
+    """用户登出"""
+    try:
+        # 清空对话状态
+        user_id = session.get('user_id', 'unknown')
+        if user_id in dialogue_state:
+            del dialogue_state[user_id]
+        
+        # 清空对话历史表
+        clear_user_dialogues()
+        
+        # 清空推荐得分表
+        conn = sqlite3.connect('data/learning.db')
+        cursor = conn.cursor()
+        cursor.execute('DELETE FROM recommendation_scores')
+        cursor.execute('DELETE FROM sqlite_sequence WHERE name="recommendation_scores"')
+        conn.commit()
+        conn.close()
+        
+        # 清除session
+        session.clear()
+        return jsonify({'success': True, 'message': '登出成功'}), 200
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'登出失败: {str(e)}'}), 500
+
+@app.route('/profile', methods=['GET'])
+def profile():
+    """获取用户个人资料"""
+    try:
+        if 'user_id' not in session:
+            return jsonify({'success': False, 'message': '未登录'}), 401
+        
+        user_id = session['user_id']
+        username = session['username']
+        email = session['email']
+        
+        return jsonify({
+            'success': True,
+            'user': {
+                'id': user_id,
+                'username': username,
+                'email': email
+            }
+        }), 200
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'获取个人资料失败: {str(e)}'}), 500
 
 if __name__ == '__main__':
     # 清空对话状态

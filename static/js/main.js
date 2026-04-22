@@ -77,7 +77,7 @@ function addMessage(content, sender) {
         formattedContent = content.replace(/#+/g, '');
         
         // 处理资源项，转换为美观的卡片形式
-        formattedContent = formattedContent.replace(/(\d+)\.\s*\[(.*?)\]\s*(.*?)\s*-\s*(https?:\/\/[^\s]+)/g, function(match, index, type, title, url) {
+        formattedContent = formattedContent.replace(/(\d+)\.\s*[\[【](.*?)[\]】]\s*(.*?)\s*-\s*(https?:\/\/[^\s]+)/g, function(match, index, type, title, url) {
             return `
                 <div class="resource-item">
                     <div class="resource-header">
@@ -213,12 +213,12 @@ function formatRecommendations(content) {
                 
                 formatted.push(`
                     <div class="resource-item">
-                        <span class="resource-index">${index}</span>
-                        <span class="resource-tag">${type}</span>
-                        <div class="resource-info">
+                        <div class="resource-header">
+                            <span class="resource-index">${index}</span>
+                            <span class="resource-tag">${type}</span>
                             <span class="resource-title">${title || '学习资源'}</span>
                         </div>
-                        <a href="${url}" target="_blank" class="resource-link" ${url === '#' ? 'style="pointer-events: none; opacity: 0.5;"' : ''}>查看 →</a>
+                        <a href="${url}" target="_blank" class="resource-url">${url}</a>
                     </div>
                 `);
             } else {
@@ -301,38 +301,27 @@ async function clearChat() {
     }
 }
 
-// 加载历史记录
+// 加载历史记录（现在默认显示欢迎消息，不加载历史记录）
 async function loadHistory() {
     try {
-        const response = await fetch('/history');
-        const data = await response.json();
-        
         const messagesDiv = document.getElementById('chat-messages');
         messagesDiv.innerHTML = '';
         
-        if (data.history && data.history.length > 0) {
-            // 有历史记录，显示历史
-            data.history.reverse().forEach(item => {
-                addMessage(item.user, 'user');
-                addMessage(item.bot, 'bot');
-            });
-        } else {
-            // 没有历史记录，显示欢迎消息
-            const welcomeDiv = document.createElement('div');
-            welcomeDiv.className = 'message bot-message';
-            welcomeDiv.innerHTML = `
-                <div class="message-avatar">🤖</div>
-                <div class="message-content-wrapper">
-                    <div class="message-content">
-                        你好！我是你的学习助手。请问你想学习什么技术？比如：Python、Java、前端开发等
-                    </div>
-                    <div class="timestamp">刚刚</div>
+        // 显示欢迎消息
+        const welcomeDiv = document.createElement('div');
+        welcomeDiv.className = 'message bot-message';
+        welcomeDiv.innerHTML = `
+            <div class="message-avatar">🤖</div>
+            <div class="message-content-wrapper">
+                <div class="message-content">
+                    你好！我是你的学习助手。请问你想学习什么技术？比如：Python、Java、前端开发等
                 </div>
-            `;
-            messagesDiv.appendChild(welcomeDiv);
-        }
+                <div class="timestamp">刚刚</div>
+            </div>
+        `;
+        messagesDiv.appendChild(welcomeDiv);
     } catch (error) {
-        console.log('历史记录加载失败');
+        console.log('初始化聊天界面失败');
         // 出错时显示欢迎消息
         const messagesDiv = document.getElementById('chat-messages');
         messagesDiv.innerHTML = '';

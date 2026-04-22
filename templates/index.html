@@ -28,6 +28,9 @@
                 </div>
             </div>
             <div class="header-right">
+                <button class="auth-btn" onclick="logout()">
+                    <span>🚪</span> 登出
+                </button>
                 <button class="clear-btn" onclick="clearChat()">
                     <span>🔄</span> 新对话
                 </button>
@@ -56,5 +59,31 @@
     </div>
 
     <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+    <script>
+        // 登出功能
+        function logout() {
+            if (confirm('确定要登出吗？')) {
+                fetch('/logout', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        alert('登出成功');
+                        window.location.href = '/login';
+                    } else {
+                        alert('登出失败: ' + data.message);
+                    }
+                })
+                .catch(error => {
+                    alert('登出失败，请重试');
+                    console.error('Error:', error);
+                });
+            }
+        }
+    </script>
 </body>
 </html>
