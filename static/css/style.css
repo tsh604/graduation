@@ -67,6 +67,22 @@ body {
     gap: 12px;
 }
 
+/* 用户信息样式 */
+.user-info {
+    padding: 10px 20px;
+    background: rgba(255, 255, 255, 0.8);
+    border: 1px solid rgba(203, 213, 225, 0.6);
+    border-radius: 30px;
+    font-size: 14px;
+    font-weight: 500;
+    color: #475569;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    backdrop-filter: blur(5px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.02);
+}
+
 /* 登录和注册按钮 */
 .auth-btn {
     padding: 10px 20px;
@@ -408,6 +424,7 @@ body {
     line-height: 1.6;
     font-size: 15px;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.02);
+    text-align: left;
 }
 
 .user-message .message-content {

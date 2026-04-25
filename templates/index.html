@@ -28,6 +28,9 @@
                 </div>
             </div>
             <div class="header-right">
+                <div class="user-info">
+                    <span>👤</span> {{ session['username'] }}
+                </div>
                 <button class="auth-btn" onclick="logout()">
                     <span>🚪</span> 登出
                 </button>
