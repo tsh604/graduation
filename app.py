@@ -2,7 +2,7 @@
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for
 import sqlite3
 import uuid
-from database import init_database, save_dialogue, clear_user_dialogues, register_user, verify_user, get_user_by_email
+from database import init_database, save_dialogue, clear_user_dialogues, register_user, verify_user, get_user_by_email, add_collection, remove_collection, get_user_collections, check_collection
 from recommender import Recommender
 from path_planner import generate_learning_plan, get_learning_efficiency_tips
 import json
@@ -1132,6 +1132,11 @@ def get_domains():
     domains = list(knowledge_graph.keys())
     return jsonify({'domains': domains})
 
+@app.route('/get-history', methods=['GET'])
+def get_history_route():
+    """获取对话历史（需要登录）"""
+    return get_history()
+
 @app.route('/search-resource', methods=['POST'])
 def search_resource():
     """使用大模型搜索资源并添加到数据库（需要登录）"""
@@ -1323,6 +1328,120 @@ def profile():
         }), 200
     except Exception as e:
         return jsonify({'success': False, 'message': f'获取个人资料失败: {str(e)}'}), 500
+
+@app.route('/user', methods=['GET'])
+def user_management():
+    """用户管理页面"""
+    try:
+        if 'user_id' not in session:
+            return redirect('/login')
+        
+        return render_template('user.html')
+    except Exception as e:
+        print(f'用户管理页面加载失败: {str(e)}')
+        return redirect('/')
+
+# 收藏相关路由
+@app.route('/collection/add', methods=['POST'])
+def add_collection_route():
+    """添加收藏"""
+    try:
+        if 'user_id' not in session:
+            return jsonify({'success': False, 'message': '未登录'}), 401
+        
+        data = request.json
+        resource_id = data.get('resource_id')
+        
+        if not resource_id:
+            return jsonify({'success': False, 'message': '资源ID不能为空'}), 400
+        
+        user_id = session['user_id']
+        success, message = add_collection(user_id, resource_id)
+        
+        return jsonify({
+            'success': success,
+            'message': message
+        }), 200
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'添加收藏失败: {str(e)}'}), 500
+
+@app.route('/collection/remove', methods=['POST'])
+def remove_collection_route():
+    """取消收藏"""
+    try:
+        if 'user_id' not in session:
+            return jsonify({'success': False, 'message': '未登录'}), 401
+        
+        data = request.json
+        resource_id = data.get('resource_id')
+        
+        if not resource_id:
+            return jsonify({'success': False, 'message': '资源ID不能为空'}), 400
+        
+        user_id = session['user_id']
+        success, message = remove_collection(user_id, resource_id)
+        
+        return jsonify({
+            'success': success,
+            'message': message
+        }), 200
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'取消收藏失败: {str(e)}'}), 500
+
+@app.route('/collection/list', methods=['GET'])
+def get_collections_route():
+    """获取用户收藏列表"""
+    try:
+        if 'user_id' not in session:
+            return jsonify({'success': False, 'message': '未登录'}), 401
+        
+        user_id = session['user_id']
+        collections = get_user_collections(user_id)
+        
+        # 格式化收藏列表
+        formatted_collections = []
+        for collection in collections:
+            formatted_collections.append({
+                'id': collection[0],
+                'title': collection[1],
+                'type': collection[2],
+                'knowledge_point': collection[3],
+                'difficulty': collection[4],
+                'url': collection[5],
+                'description': collection[6],
+                'learning_time': collection[7],
+                'price': collection[8],
+                'collected_at': collection[9]
+            })
+        
+        return jsonify({
+            'success': True,
+            'collections': formatted_collections
+        }), 200
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'获取收藏列表失败: {str(e)}'}), 500
+
+@app.route('/collection/check', methods=['GET'])
+def check_collection_route():
+    """检查资源是否已被收藏"""
+    try:
+        if 'user_id' not in session:
+            return jsonify({'success': False, 'message': '未登录'}), 401
+        
+        resource_id = request.args.get('resource_id')
+        
+        if not resource_id:
+            return jsonify({'success': False, 'message': '资源ID不能为空'}), 400
+        
+        user_id = session['user_id']
+        is_collected = check_collection(user_id, resource_id)
+        
+        return jsonify({
+            'success': True,
+            'is_collected': is_collected
+        }), 200
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'检查收藏状态失败: {str(e)}'}), 500
 
 if __name__ == '__main__':
     # 清空对话状态

@@ -78,12 +78,26 @@ function addMessage(content, sender) {
         
         // 处理资源项，转换为美观的卡片形式
         formattedContent = formattedContent.replace(/(\d+)\.\s*[\[【](.*?)[\]】]\s*(.*?)\s*-\s*(https?:\/\/[^\s]+)/g, function(match, index, type, title, url) {
+            // 为了确保收藏正确的资源，我们需要获取实际的资源ID
+            // 这里我们使用一个简单的映射，将常见资源名称映射到对应的资源ID
+            const resourceIdMap = {
+                '廖雪峰Python教程': 3,
+                'Python 100天': 9,
+                'Python基础教程': 1,
+                'Python进阶': 2,
+                'Python Cookbook': 4,
+                'LeetCode Python题库': 5
+            };
+            
+            // 尝试从映射中获取资源ID，如果没有则使用索引作为默认值
+            const resourceId = resourceIdMap[title.trim()] || parseInt(index);
             return `
                 <div class="resource-item">
                     <div class="resource-header">
                         <span class="resource-index">${index}</span>
                         <span class="resource-tag">${type}</span>
                         <span class="resource-title">${title.trim()}</span>
+                        <button class="collection-btn" onclick="addCollection(${resourceId})"><span>⭐</span> 收藏</button>
                     </div>
                     <a href="${url}" target="_blank" class="resource-url">${url}</a>
                 </div>
@@ -211,12 +225,26 @@ function formatRecommendations(content) {
                 // 清理标题中多余的符号
                 title = title.replace(/^-\s*/, '').trim();
                 
+                // 为了确保收藏正确的资源，我们需要获取实际的资源ID
+                // 这里我们使用一个简单的映射，将常见资源名称映射到对应的资源ID
+                const resourceIdMap = {
+                    '廖雪峰Python教程': 3,
+                    'Python 100天': 9,
+                    'Python基础教程': 1,
+                    'Python进阶': 2,
+                    'Python Cookbook': 4,
+                    'LeetCode Python题库': 5
+                };
+                
+                // 尝试从映射中获取资源ID，如果没有则使用索引作为默认值
+                const resourceId = resourceIdMap[title] || parseInt(index);
                 formatted.push(`
                     <div class="resource-item">
                         <div class="resource-header">
                             <span class="resource-index">${index}</span>
                             <span class="resource-tag">${type}</span>
                             <span class="resource-title">${title || '学习资源'}</span>
+                            <button class="collection-btn" onclick="addCollection(${resourceId})"><span>⭐</span> 收藏</button>
                         </div>
                         <a href="${url}" target="_blank" class="resource-url">${url}</a>
                     </div>
@@ -305,38 +333,119 @@ async function clearChat() {
 async function loadHistory() {
     try {
         const messagesDiv = document.getElementById('chat-messages');
-        messagesDiv.innerHTML = '';
-        
-        // 显示欢迎消息
-        const welcomeDiv = document.createElement('div');
-        welcomeDiv.className = 'message bot-message';
-        welcomeDiv.innerHTML = `
-            <div class="message-avatar">🤖</div>
-            <div class="message-content-wrapper">
-                <div class="message-content">
-                    你好！我是你的学习助手。请问你想学习什么技术？比如：Python、Java、前端开发等
-                </div>
-                <div class="timestamp">刚刚</div>
-            </div>
-        `;
-        messagesDiv.appendChild(welcomeDiv);
+        // 检查元素是否存在，只在推荐界面中执行
+        if (messagesDiv) {
+            messagesDiv.innerHTML = '';
+            
+            // 从服务器加载对话历史
+            const response = await fetch('/get-history');
+            const data = await response.json();
+            
+            if (data.history && data.history.length > 0) {
+                // 反转历史记录，使最早的消息显示在最上方
+                const reversedHistory = data.history.reverse();
+                
+                reversedHistory.forEach(item => {
+                    // 显示用户消息
+                    const userDiv = document.createElement('div');
+                    userDiv.className = 'message user-message';
+                    userDiv.innerHTML = `
+                        <div class="message-avatar">👤</div>
+                        <div class="message-content-wrapper">
+                            <div class="message-content">${item.user}</div>
+                            <div class="timestamp">${item.time}</div>
+                        </div>
+                    `;
+                    messagesDiv.appendChild(userDiv);
+                    
+                    // 显示机器人消息
+                    const botDiv = document.createElement('div');
+                    botDiv.className = 'message bot-message';
+                    
+                    // 处理机器人消息内容，应用与addMessage函数相同的美化处理
+                    let formattedContent = item.bot;
+                    
+                    // 直接移除所有#符号，确保它们不会显示在页面上
+                    formattedContent = formattedContent.replace(/#+/g, '');
+                    
+                    // 处理资源项，转换为美观的卡片形式
+                    formattedContent = formattedContent.replace(/(\d+)\.\s*[\[【](.*?)[\]】]\s*(.*?)\s*-\s*(https?:\/\/[^\s]+)/g, function(match, index, type, title, url) {
+                        // 为了确保收藏正确的资源，我们需要获取实际的资源ID
+                        // 这里我们使用一个简单的映射，将常见资源名称映射到对应的资源ID
+                        const resourceIdMap = {
+                            '廖雪峰Python教程': 3,
+                            'Python 100天': 9,
+                            'Python基础教程': 1,
+                            'Python进阶': 2,
+                            'Python Cookbook': 4,
+                            'LeetCode Python题库': 5
+                        };
+                        
+                        // 尝试从映射中获取资源ID，如果没有则使用索引作为默认值
+                        const resourceId = resourceIdMap[title.trim()] || parseInt(index);
+                        return `
+                            <div class="resource-item">
+                                <div class="resource-header">
+                                    <span class="resource-index">${index}</span>
+                                    <span class="resource-tag">${type}</span>
+                                    <span class="resource-title">${title.trim()}</span>
+                                    <button class="collection-btn" onclick="addCollection(${resourceId})"><span>⭐</span> 收藏</button>
+                                </div>
+                                <a href="${url}" class="resource-link" target="_blank">${url}</a>
+                            </div>
+                        `;
+                    });
+                    
+                    botDiv.innerHTML = `
+                        <div class="message-avatar">🤖</div>
+                        <div class="message-content-wrapper">
+                            <div class="message-content">${formattedContent}</div>
+                            <div class="timestamp">${item.time}</div>
+                        </div>
+                    `;
+                    messagesDiv.appendChild(botDiv);
+                });
+            } else {
+                // 显示欢迎消息
+                const welcomeDiv = document.createElement('div');
+                welcomeDiv.className = 'message bot-message';
+                welcomeDiv.innerHTML = `
+                    <div class="message-avatar">🤖</div>
+                    <div class="message-content-wrapper">
+                        <div class="message-content">
+                            你好！我是你的学习助手。请问你想学习什么技术？比如：Python、Java、前端开发等
+                        </div>
+                        <div class="timestamp">刚刚</div>
+                    </div>
+                `;
+                messagesDiv.appendChild(welcomeDiv);
+            }
+            
+            // 滚动到对话最底端
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
     } catch (error) {
-        console.log('初始化聊天界面失败');
-        // 出错时显示欢迎消息
+        console.log('初始化聊天界面失败:', error);
+        // 显示欢迎消息作为 fallback
         const messagesDiv = document.getElementById('chat-messages');
-        messagesDiv.innerHTML = '';
-        const welcomeDiv = document.createElement('div');
-        welcomeDiv.className = 'message bot-message';
-        welcomeDiv.innerHTML = `
-            <div class="message-avatar">🤖</div>
-            <div class="message-content-wrapper">
-                <div class="message-content">
-                    你好！我是你的学习助手。请问你想学习什么技术？比如：Python、Java、前端开发等
+        if (messagesDiv) {
+            messagesDiv.innerHTML = '';
+            const welcomeDiv = document.createElement('div');
+            welcomeDiv.className = 'message bot-message';
+            welcomeDiv.innerHTML = `
+                <div class="message-avatar">🤖</div>
+                <div class="message-content-wrapper">
+                    <div class="message-content">
+                        你好！我是你的学习助手。请问你想学习什么技术？比如：Python、Java、前端开发等
+                    </div>
+                    <div class="timestamp">刚刚</div>
                 </div>
-                <div class="timestamp">刚刚</div>
-            </div>
-        `;
-        messagesDiv.appendChild(welcomeDiv);
+            `;
+            messagesDiv.appendChild(welcomeDiv);
+            
+            // 滚动到对话最底端
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
     }
 }
 
@@ -462,6 +571,81 @@ async function searchAndAddResource(topic, subtopic) {
     }
 }
 
+// 跳转到用户管理页面
+function showUserProfile() {
+    window.location.href = '/user';
+}
+
+// 添加收藏
+async function addCollection(resourceId) {
+    try {
+        const response = await fetch('/collection/add', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({resource_id: resourceId})
+        });
+        const data = await response.json();
+        
+        if (data.success) {
+            alert('收藏成功');
+        } else {
+            alert('收藏失败: ' + data.message);
+        }
+    } catch (error) {
+        console.error('添加收藏失败:', error);
+        alert('添加收藏失败，请稍后再试');
+    }
+}
+
+// 取消收藏
+async function removeCollection(resourceId) {
+    if (confirm('确定要取消收藏吗？')) {
+        try {
+            const response = await fetch('/collection/remove', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({resource_id: resourceId})
+            });
+            const data = await response.json();
+            
+            if (data.success) {
+                alert('取消收藏成功');
+                // 直接从收藏列表中删除对应的收藏项
+                const collectionItems = document.querySelectorAll('.collection-item');
+                collectionItems.forEach(item => {
+                    const deleteButton = item.querySelector('.collection-delete');
+                    if (deleteButton && deleteButton.onclick.toString().includes(resourceId)) {
+                        item.remove();
+                    }
+                });
+                
+                // 检查是否还有收藏项，如果没有则显示空收藏提示
+                const collectionsList = document.querySelector('.collections-list');
+                if (collectionsList && collectionsList.children.length === 0) {
+                    collectionsList.innerHTML = '<div class="empty-collection">暂无收藏资源</div>';
+                }
+            } else {
+                alert('取消收藏失败: ' + data.message);
+            }
+        } catch (error) {
+            console.error('取消收藏失败:', error);
+            alert('取消收藏失败，请稍后再试');
+        }
+    }
+}
+
+// 检查收藏状态
+async function checkCollectionStatus(resourceId) {
+    try {
+        const response = await fetch(`/collection/check?resource_id=${resourceId}`);
+        const data = await response.json();
+        return data.success ? data.is_collected : false;
+    } catch (error) {
+        console.error('检查收藏状态失败:', error);
+        return false;
+    }
+}
+
 // 初始化
 document.addEventListener('DOMContentLoaded', function() {
     // 为所有现有链接添加处理
@@ -477,14 +661,18 @@ document.addEventListener('DOMContentLoaded', function() {
     // 加载历史记录
     loadHistory();
     
-    // 添加浏览资源库按钮
-    const headerRight = document.querySelector('.header-right');
-    if (headerRight) {
-        const libraryButton = document.createElement('button');
-        libraryButton.className = 'library-button';
-        libraryButton.textContent = '浏览资源库';
-        libraryButton.onclick = showResourceLibrary;
-        headerRight.insertBefore(libraryButton, headerRight.firstChild);
+    // 检查当前页面是否为用户管理页面
+    const userContainer = document.querySelector('.user-container');
+    if (!userContainer) {
+        // 添加浏览资源库按钮（仅在推荐界面添加）
+        const headerRight = document.querySelector('.header-right');
+        if (headerRight) {
+            const libraryButton = document.createElement('button');
+            libraryButton.className = 'library-button';
+            libraryButton.textContent = '浏览资源库';
+            libraryButton.onclick = showResourceLibrary;
+            headerRight.insertBefore(libraryButton, headerRight.firstChild);
+        }
     }
     
     // 强制刷新缓存

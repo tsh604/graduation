@@ -81,6 +81,24 @@ body {
     gap: 6px;
     backdrop-filter: blur(5px);
     box-shadow: 0 4px 8px rgba(0, 0, 0, 0.02);
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.user-info:hover {
+    background: rgba(255, 255, 255, 1);
+    border-color: #6366f1;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.2);
+}
+
+.user-arrow {
+    font-size: 12px;
+    transition: transform 0.2s ease;
+}
+
+.user-info:hover .user-arrow {
+    transform: rotate(180deg);
 }
 
 /* 登录和注册按钮 */
@@ -890,4 +908,233 @@ body {
     .domains-list {
         grid-template-columns: 1fr;
     }
+}
+
+/* 收藏列表样式 */
+.collections-list {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.collection-item {
+    padding: 20px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 20px;
+    transition: all 0.2s ease;
+}
+
+.collection-item:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.08);
+    border-color: #cbd5e1;
+}
+
+.collection-header {
+    display: flex;
+    align-items: center;
+    margin-bottom: 12px;
+    gap: 12px;
+}
+
+.collection-index {
+    width: 32px;
+    height: 32px;
+    background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    font-weight: 600;
+    color: white;
+    flex-shrink: 0;
+    box-shadow: 0 4px 8px rgba(99, 102, 241, 0.3);
+}
+
+.collection-tag {
+    background: #dbeafe;
+    color: #2563eb;
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 500;
+    flex-shrink: 0;
+}
+
+.collection-title {
+    flex: 1;
+    font-weight: 600;
+    color: #1e293b;
+    font-size: 15px;
+    line-height: 1.4;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.collection-delete {
+    background: #fee2e2;
+    color: #dc2626;
+    border: none;
+    padding: 8px 12px;
+    border-radius: 12px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: all 0.2s ease;
+    flex-shrink: 0;
+}
+
+.collection-delete:hover {
+    background: #dc2626;
+    color: white;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(220, 38, 38, 0.2);
+}
+
+.collection-info {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+}
+
+.collection-knowledge, .collection-difficulty, .collection-time, .collection-price {
+    background: #f1f5f9;
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 500;
+    color: #64748b;
+    flex-shrink: 0;
+}
+
+.collection-description {
+    margin: 12px 0;
+    color: #475569;
+    line-height: 1.4;
+    font-size: 14px;
+}
+
+.collection-url {
+    display: inline-block;
+    margin: 12px 0;
+    color: #3b82f6;
+    text-decoration: none;
+    font-size: 14px;
+    word-break: break-all;
+    transition: all 0.2s ease;
+}
+
+.collection-url:hover {
+    color: #2563eb;
+    text-decoration: underline;
+}
+
+.collection-date {
+    font-size: 12px;
+    color: #94a3b8;
+    margin-top: 12px;
+}
+
+.empty-collection {
+    text-align: center;
+    padding: 40px 20px;
+    color: #64748b;
+    font-size: 16px;
+    font-weight: 500;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 20px;
+    margin-top: 20px;
+}
+
+/* 用户管理界面样式 */
+.user-profile-section {
+    margin-bottom: 32px;
+    padding: 20px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 20px;
+}
+
+.user-profile-section h3 {
+    font-size: 18px;
+    font-weight: 600;
+    color: #1e293b;
+    margin-bottom: 16px;
+}
+
+.user-info-item {
+    display: flex;
+    align-items: center;
+    margin-bottom: 12px;
+    padding: 8px 0;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.user-info-item:last-child {
+    border-bottom: none;
+}
+
+.info-label {
+    width: 80px;
+    font-weight: 500;
+    color: #64748b;
+    font-size: 14px;
+}
+
+.info-value {
+    flex: 1;
+    color: #1e293b;
+    font-size: 14px;
+    font-weight: 500;
+}
+
+.user-collections-section {
+    margin-top: 24px;
+}
+
+.user-collections-section h3 {
+    font-size: 18px;
+    font-weight: 600;
+    color: #1e293b;
+    margin-bottom: 16px;
+}
+
+/* 收藏按钮样式 */
+.collection-btn {
+    background: #f1f5f9;
+    color: #64748b;
+    border: 1px solid #e2e8f0;
+    padding: 8px 16px;
+    border-radius: 12px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+}
+
+.collection-btn:hover {
+    background: #e2e8f0;
+    color: #475569;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.05);
+}
+
+.collection-btn.collected {
+    background: #dbeafe;
+    color: #2563eb;
+    border-color: #bfdbfe;
+}
+
+.collection-btn.collected:hover {
+    background: #bfdbfe;
+    color: #1d4ed8;
 }

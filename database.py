@@ -65,6 +65,19 @@ def init_database():
         )
     ''')
     
+    # 创建收藏表
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS collections (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            resource_id INTEGER NOT NULL,
+            collected_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id),
+            FOREIGN KEY (resource_id) REFERENCES resources(id),
+            UNIQUE(user_id, resource_id)
+        )
+    ''')
+    
     # 检查是否已有数据
     cursor.execute('SELECT COUNT(*) FROM resources')
     count = cursor.fetchone()[0]
@@ -454,6 +467,106 @@ def get_user_by_id(user_id):
     except Exception as e:
         print(f"获取用户信息失败: {e}")
         return None
+    finally:
+        conn.close()
+
+# 收藏相关函数
+def add_collection(user_id, resource_id):
+    """添加收藏"""
+    conn = sqlite3.connect('data/learning.db')
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute(
+            'INSERT INTO collections (user_id, resource_id) VALUES (?, ?)',
+            (user_id, resource_id)
+        )
+        conn.commit()
+        return True, "收藏成功"
+    except sqlite3.IntegrityError:
+        return False, "已收藏过该资源"
+    except Exception as e:
+        return False, f"收藏失败: {e}"
+    finally:
+        conn.close()
+
+def remove_collection(user_id, resource_id):
+    """取消收藏"""
+    conn = sqlite3.connect('data/learning.db')
+    cursor = conn.cursor()
+    
+    try:
+        # 首先获取要删除的收藏记录的id
+        cursor.execute(
+            'SELECT id FROM collections WHERE user_id = ? AND resource_id = ?',
+            (user_id, resource_id)
+        )
+        result = cursor.fetchone()
+        if not result:
+            return False, "未找到收藏记录"
+        
+        deleted_id = result[0]
+        
+        # 删除这条记录
+        cursor.execute(
+            'DELETE FROM collections WHERE user_id = ? AND resource_id = ?',
+            (user_id, resource_id)
+        )
+        conn.commit()
+        
+        # 对所有id大于删除id的记录，将它们的id减1
+        cursor.execute(
+            'UPDATE collections SET id = id - 1 WHERE id > ?',
+            (deleted_id,)
+        )
+        conn.commit()
+        
+        # 重置AUTOINCREMENT计数器
+        cursor.execute('DELETE FROM sqlite_sequence WHERE name="collections"')
+        cursor.execute('INSERT INTO sqlite_sequence (name, seq) VALUES ("collections", (SELECT COALESCE(MAX(id), 0) FROM collections))')
+        conn.commit()
+        
+        return True, "取消收藏成功"
+    except Exception as e:
+        return False, f"取消收藏失败: {e}"
+    finally:
+        conn.close()
+
+def get_user_collections(user_id):
+    """获取用户的收藏列表"""
+    conn = sqlite3.connect('data/learning.db')
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute('''
+            SELECT r.id, r.title, r.type, r.knowledge_point, r.difficulty, r.url, r.description, r.learning_time, r.price, c.collected_at
+            FROM resources r
+            JOIN collections c ON r.id = c.resource_id
+            WHERE c.user_id = ?
+            ORDER BY c.collected_at DESC
+        ''', (user_id,))
+        collections = cursor.fetchall()
+        return collections
+    except Exception as e:
+        print(f"获取收藏列表失败: {e}")
+        return []
+    finally:
+        conn.close()
+
+def check_collection(user_id, resource_id):
+    """检查资源是否已被收藏"""
+    conn = sqlite3.connect('data/learning.db')
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute(
+            'SELECT id FROM collections WHERE user_id = ? AND resource_id = ?',
+            (user_id, resource_id)
+        )
+        return cursor.fetchone() is not None
+    except Exception as e:
+        print(f"检查收藏状态失败: {e}")
+        return False
     finally:
         conn.close()
 
