@@ -78,6 +78,15 @@ def init_database():
         )
     ''')
     
+    # 创建用户偏好设置表
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS user_preferences (
+            user_id INTEGER PRIMARY KEY,
+            save_history INTEGER DEFAULT 1,
+            FOREIGN KEY (user_id) REFERENCES users(id)
+        )
+    ''')
+    
     # 检查是否已有数据
     cursor.execute('SELECT COUNT(*) FROM resources')
     count = cursor.fetchone()[0]
@@ -384,6 +393,18 @@ def reset_database():
         print("操作已取消")
 
 
+def is_dialogue_exists(user_id, user_message, bot_response):
+    """检查对话是否已存在于数据库"""
+    conn = sqlite3.connect('data/learning.db')
+    cursor = conn.cursor()
+    cursor.execute(
+        'SELECT id FROM dialogues WHERE user_id = ? AND user_message = ? AND bot_response = ?',
+        (user_id, user_message, bot_response)
+    )
+    result = cursor.fetchone()
+    conn.close()
+    return result is not None
+
 def clear_user_dialogues():
     """清空对话历史表并重置自增ID"""
     conn = sqlite3.connect('data/learning.db')
@@ -467,6 +488,191 @@ def get_user_by_id(user_id):
     except Exception as e:
         print(f"获取用户信息失败: {e}")
         return None
+    finally:
+        conn.close()
+
+def update_user(user_id, username=None, email=None):
+    """更新用户信息"""
+    conn = sqlite3.connect('data/learning.db')
+    cursor = conn.cursor()
+    
+    try:
+        if username and email:
+            cursor.execute('UPDATE users SET username = ?, email = ? WHERE id = ?', 
+                         (username, email, user_id))
+        elif username:
+            cursor.execute('UPDATE users SET username = ? WHERE id = ?', 
+                         (username, user_id))
+        elif email:
+            cursor.execute('UPDATE users SET email = ? WHERE id = ?', 
+                         (email, user_id))
+        
+        conn.commit()
+        return True, "更新成功"
+    except sqlite3.IntegrityError as e:
+        conn.rollback()
+        if 'UNIQUE constraint failed: users.username' in str(e):
+            return False, "用户名已存在"
+        elif 'UNIQUE constraint failed: users.email' in str(e):
+            return False, "邮箱已被使用"
+        else:
+            return False, f"更新失败: {e}"
+    except Exception as e:
+        print(f"更新用户信息失败: {e}")
+        conn.rollback()
+        return False, f"更新失败: {e}"
+    finally:
+        conn.close()
+
+def update_password(user_id, old_password, new_password):
+    """修改密码"""
+    conn = sqlite3.connect('data/learning.db')
+    cursor = conn.cursor()
+    
+    try:
+        # 先验证旧密码
+        cursor.execute('SELECT password FROM users WHERE id = ?', (user_id,))
+        result = cursor.fetchone()
+        
+        if not result:
+            return False, "用户不存在"
+        
+        if result[0] != old_password:
+            return False, "旧密码不正确"
+        
+        # 更新密码
+        cursor.execute('UPDATE users SET password = ? WHERE id = ?', (new_password, user_id))
+        conn.commit()
+        return True, "密码修改成功"
+    except Exception as e:
+        print(f"修改密码失败: {e}")
+        conn.rollback()
+        return False, f"修改密码失败: {e}"
+    finally:
+        conn.close()
+
+def delete_user(user_id):
+    """删除用户账户"""
+    conn = sqlite3.connect('data/learning.db')
+    cursor = conn.cursor()
+    
+    try:
+        # 删除用户的收藏
+        cursor.execute('DELETE FROM collections WHERE user_id = ?', (user_id,))
+        
+        # 删除用户的对话历史
+        cursor.execute('DELETE FROM dialogues WHERE user_id = ?', (user_id,))
+        
+        # 删除用户偏好设置
+        cursor.execute('DELETE FROM user_preferences WHERE user_id = ?', (user_id,))
+        
+        # 删除用户
+        cursor.execute('DELETE FROM users WHERE id = ?', (user_id,))
+        
+        conn.commit()
+        return True, "账户删除成功"
+    except Exception as e:
+        print(f"删除账户失败: {e}")
+        conn.rollback()
+        return False, f"删除账户失败: {e}"
+    finally:
+        conn.close()
+
+def get_user_preferences(user_id):
+    """获取用户偏好设置"""
+    conn = sqlite3.connect('data/learning.db')
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute('SELECT save_history FROM user_preferences WHERE user_id = ?', (user_id,))
+        result = cursor.fetchone()
+        
+        if result:
+            return {'save_history': bool(result[0])}
+        else:
+            # 如果没有设置，返回默认值
+            return {'save_history': True}
+    except Exception as e:
+        print(f"获取用户偏好失败: {e}")
+        return {'save_history': True}
+    finally:
+        conn.close()
+
+def set_user_preferences(user_id, save_history=None):
+    """设置用户偏好"""
+    conn = sqlite3.connect('data/learning.db')
+    cursor = conn.cursor()
+    
+    try:
+        # 先检查是否已有记录
+        cursor.execute('SELECT * FROM user_preferences WHERE user_id = ?', (user_id,))
+        result = cursor.fetchone()
+        
+        if result:
+            # 更新现有记录
+            if save_history is not None:
+                cursor.execute('UPDATE user_preferences SET save_history = ? WHERE user_id = ?', 
+                             (int(save_history), user_id))
+        else:
+            # 插入新记录
+            cursor.execute('INSERT INTO user_preferences (user_id, save_history) VALUES (?, ?)', 
+                         (user_id, int(save_history) if save_history is not None else 1))
+        
+        conn.commit()
+        return True, "设置成功"
+    except Exception as e:
+        print(f"设置用户偏好失败: {e}")
+        conn.rollback()
+        return False, f"设置失败: {e}"
+    finally:
+        conn.close()
+
+def clear_user_history(user_id):
+    """清除用户历史记录"""
+    conn = sqlite3.connect('data/learning.db')
+    cursor = conn.cursor()
+    
+    try:
+        # 删除用户的对话历史
+        cursor.execute('DELETE FROM dialogues WHERE user_id = ?', (user_id,))
+        
+        # 检查是否所有记录都被删除了
+        cursor.execute('SELECT COUNT(*) FROM dialogues')
+        count = cursor.fetchone()[0]
+        
+        # 如果没有记录了，重置自增计数器
+        if count == 0:
+            cursor.execute('DELETE FROM sqlite_sequence WHERE name="dialogues"')
+        
+        conn.commit()
+        return True, "历史记录已清除"
+    except Exception as e:
+        print(f"清除历史记录失败: {e}")
+        conn.rollback()
+        return False, f"清除失败: {e}"
+    finally:
+        conn.close()
+
+def get_user_dialogues(user_id):
+    """获取用户的对话历史"""
+    conn = sqlite3.connect('data/learning.db')
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute('SELECT user_message, bot_response FROM dialogues WHERE user_id = ? ORDER BY timestamp', (user_id,))
+        results = cursor.fetchall()
+        
+        dialogues = []
+        for row in results:
+            dialogues.append({
+                'user_message': row[0],
+                'bot_response': row[1]
+            })
+        
+        return dialogues
+    except Exception as e:
+        print(f"获取对话历史失败: {e}")
+        return []
     finally:
         conn.close()
 

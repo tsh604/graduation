@@ -2,7 +2,7 @@
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for
 import sqlite3
 import uuid
-from database import init_database, save_dialogue, clear_user_dialogues, register_user, verify_user, get_user_by_email, add_collection, remove_collection, get_user_collections, check_collection
+from database import init_database, save_dialogue, clear_user_dialogues, register_user, verify_user, get_user_by_email, add_collection, remove_collection, get_user_collections, check_collection, update_user, update_password, delete_user, get_user_preferences, set_user_preferences, clear_user_history, get_user_dialogues, is_dialogue_exists
 from recommender import Recommender
 from path_planner import generate_learning_plan, get_learning_efficiency_tips
 import json
@@ -26,9 +26,6 @@ except Exception as e:
 
 # 初始化数据库
 init_database()
-
-# 应用启动时清空对话历史，确保每次启动都是一个新对话
-clear_user_dialogues()
 
 app = Flask(__name__)
 app.secret_key = 'your-secret-key-123'
@@ -68,20 +65,94 @@ class DialogueManager:
     
     @staticmethod
     def get_state(session_id):
-        """获取对话状态"""
+        """获取对话状态 - 如果内存中不存在，则从数据库恢复"""
         if session_id not in dialogue_state:
-            dialogue_state[session_id] = {
-                'stage': 'initial',  # initial, asking_topic, asking_level, asking_goal, asking_time_budget, asking_money_budget, recommending
-                'context': {
-                    'topic': None,      # 学习主题
-                    'level': None,      # 难度级别
-                    'goal': None,       # 学习目标
-                    'time_budget': None, # 时间预算（小时）
-                    'money_budget': None, # 金钱预算（元）
-                },
-                'history': []
-            }
+            # 尝试从数据库恢复对话状态
+            recovered_state = DialogueManager._recover_state_from_db(session_id)
+            if recovered_state:
+                dialogue_state[session_id] = recovered_state
+            else:
+                dialogue_state[session_id] = {
+                    'stage': 'initial',  # initial, asking_topic, asking_level, asking_goal, asking_time_budget, asking_money_budget, recommending
+                    'context': {
+                        'topic': None,      # 学习主题
+                        'level': None,      # 难度级别
+                        'goal': None,       # 学习目标
+                        'time_budget': None, # 时间预算（小时）
+                        'money_budget': None, # 金钱预算（元）
+                    },
+                    'history': []
+                }
         return dialogue_state[session_id]
+    
+    @staticmethod
+    def _recover_state_from_db(user_id):
+        """从数据库历史记录恢复对话状态"""
+        dialogues = get_user_dialogues(user_id)
+        if not dialogues:
+            return None
+        
+        state = {
+            'stage': 'initial',
+            'context': {
+                'topic': None,
+                'level': None,
+                'goal': None,
+                'time_budget': None,
+                'money_budget': None,
+                'daily_time': None,
+                'is_hours': False,
+                'subtopic': None
+            },
+            'history': []
+        }
+        
+        # 分析历史对话，恢复状态
+        for dialogue in dialogues:
+            user_msg = dialogue['user_message']
+            bot_response = dialogue['bot_response']
+            
+            # 根据机器人回复推断阶段
+            if "你主要想达到什么学习目标？" in bot_response:
+                state['stage'] = 'asking_goal'
+            elif "你打算在多长时间内达到学习目的的水平？" in bot_response:
+                state['stage'] = 'asking_time_budget'
+            elif "你每天打算学习多长时间？" in bot_response:
+                state['stage'] = 'asking_daily_time'
+            elif "你学习所消耗的金钱预算是多少？" in bot_response:
+                state['stage'] = 'asking_money_budget'
+            elif "你想学" in bot_response and ("初学者还是有一定基础" in bot_response or "基础水平" in bot_response):
+                state['stage'] = 'asking_level'
+                # 提取主题
+                match = re.search(r'你想学(.+?)。', bot_response)
+                if match:
+                    state['context']['topic'] = match.group(1).strip()
+            elif "我没太明白你想学什么" in bot_response:
+                state['stage'] = 'asking_topic'
+            elif "根据你的" in bot_response and "水平和" in bot_response and "目标" in bot_response:
+                state['stage'] = 'recommending'
+            
+            # 从用户消息中提取上下文信息
+            if state['context']['topic'] is None:
+                topic = DialogueManager._extract_topic(user_msg)
+                if topic:
+                    state['context']['topic'] = topic
+            
+            if state['context']['level'] is None:
+                level = DialogueManager._extract_level(user_msg)
+                if level:
+                    state['context']['level'] = level
+            
+            if state['context']['goal'] is None:
+                goal = DialogueManager._extract_goal(user_msg)
+                if goal:
+                    state['context']['goal'] = goal
+            
+            # 添加到历史
+            state['history'].append({'role': 'user', 'content': user_msg})
+            state['history'].append({'role': 'assistant', 'content': bot_response})
+        
+        return state
     
     @staticmethod
     def clear_state(session_id):
@@ -1058,8 +1129,10 @@ def chat():
     # 记录机器人回复
     state['history'].append({'role': 'assistant', 'content': response})
     
-    # 保存到数据库
-    save_dialogue(user_id, user_message, response)
+    # 根据用户偏好决定是否保存对话
+    preferences = get_user_preferences(user_id)
+    if preferences.get('save_history', True):
+        save_dialogue(user_id, user_message, response)
     
     return jsonify({
         'response': response,
@@ -1079,8 +1152,8 @@ def reset_conversation():
         del dialogue_state[user_id]
         print(f"用户 {user_id} 的对话已重置")
     
-    # 清空对话历史表
-    clear_user_dialogues()
+    # 清空当前用户的对话历史（只清空当前用户，不是所有用户）
+    clear_user_history(user_id)
     
     session.pop('_flashes', None)
     
@@ -1131,6 +1204,46 @@ def get_domains():
     from knowledge_graph import knowledge_graph
     domains = list(knowledge_graph.keys())
     return jsonify({'domains': domains})
+
+@app.route('/check-conversation-state', methods=['GET'])
+def check_conversation_state():
+    """检查是否有活跃的对话状态并返回对话内容"""
+    if 'user_id' not in session:
+        return jsonify({'has_state': False, 'history': []})
+    
+    user_id = session['user_id']
+    
+    # 首先检查服务器内存中的对话状态
+    if user_id in dialogue_state and len(dialogue_state[user_id].get('history', [])) > 0:
+        history = dialogue_state[user_id]['history']
+        formatted_history = []
+        for i in range(0, len(history)-1, 2):
+            if i+1 < len(history):
+                formatted_history.append({
+                    'user': history[i]['content'],
+                    'bot': history[i+1]['content'],
+                    'time': '刚刚'
+                })
+        return jsonify({'has_state': True, 'history': formatted_history})
+    
+    # 然后检查数据库中的历史记录
+    conn = sqlite3.connect('data/learning.db')
+    cursor = conn.cursor()
+    cursor.execute('''
+        SELECT user_message, bot_response, timestamp 
+        FROM dialogues 
+        WHERE user_id = ? 
+        ORDER BY timestamp ASC 
+        LIMIT 10
+    ''', (user_id,))
+    db_history = cursor.fetchall()
+    conn.close()
+    
+    if len(db_history) > 0:
+        formatted_history = [{'user': h[0], 'bot': h[1], 'time': h[2]} for h in db_history]
+        return jsonify({'has_state': True, 'history': formatted_history})
+    
+    return jsonify({'has_state': False, 'history': []})
 
 @app.route('/get-history', methods=['GET'])
 def get_history_route():
@@ -1285,13 +1398,10 @@ def login():
 def logout():
     """用户登出"""
     try:
-        # 清空对话状态
+        # 清空服务器内存中的对话状态（但保留数据库中的历史记录）
         user_id = session.get('user_id', 'unknown')
         if user_id in dialogue_state:
             del dialogue_state[user_id]
-        
-        # 清空对话历史表
-        clear_user_dialogues()
         
         # 清空推荐得分表
         conn = sqlite3.connect('data/learning.db')
@@ -1340,6 +1450,163 @@ def user_management():
     except Exception as e:
         print(f'用户管理页面加载失败: {str(e)}')
         return redirect('/')
+
+@app.route('/user/update', methods=['POST'])
+def update_user_info():
+    """更新用户信息"""
+    try:
+        if 'user_id' not in session:
+            return jsonify({'success': False, 'message': '用户未登录'}), 401
+        
+        data = request.get_json()
+        username = data.get('username')
+        email = data.get('email')
+        
+        if not username and not email:
+            return jsonify({'success': False, 'message': '请提供要更新的信息'}), 400
+        
+        # 验证用户名格式（与注册时相同）
+        if username:
+            if len(username) < 3:
+                return jsonify({'success': False, 'message': '用户名至少3个字符'}), 400
+        
+        # 验证邮箱格式（与注册时相同）
+        if email:
+            if '@' not in email:
+                return jsonify({'success': False, 'message': '请输入有效的邮箱地址'}), 400
+        
+        user_id = session['user_id']
+        success, message = update_user(user_id, username, email)
+        
+        if success:
+            # 更新session中的信息
+            if username:
+                session['username'] = username
+            if email:
+                session['email'] = email
+            return jsonify({'success': True, 'message': message})
+        else:
+            return jsonify({'success': False, 'message': message}), 400
+    except Exception as e:
+        print(f'更新用户信息失败: {str(e)}')
+        return jsonify({'success': False, 'message': f'更新失败: {str(e)}'}), 500
+
+@app.route('/user/change-password', methods=['POST'])
+def change_password():
+    """修改密码"""
+    try:
+        if 'user_id' not in session:
+            return jsonify({'success': False, 'message': '用户未登录'}), 401
+        
+        data = request.get_json()
+        old_password = data.get('old_password')
+        new_password = data.get('new_password')
+        
+        if not old_password or not new_password:
+            return jsonify({'success': False, 'message': '请输入旧密码和新密码'}), 400
+        
+        if len(new_password) < 6:
+            return jsonify({'success': False, 'message': '密码至少6个字符'}), 400
+        
+        user_id = session['user_id']
+        success, message = update_password(user_id, old_password, new_password)
+        
+        if success:
+            return jsonify({'success': True, 'message': message})
+        else:
+            return jsonify({'success': False, 'message': message}), 400
+    except Exception as e:
+        print(f'修改密码失败: {str(e)}')
+        return jsonify({'success': False, 'message': f'修改密码失败: {str(e)}'}), 500
+
+@app.route('/user/delete', methods=['POST'])
+def delete_account():
+    """删除账户"""
+    try:
+        if 'user_id' not in session:
+            return jsonify({'success': False, 'message': '用户未登录'}), 401
+        
+        user_id = session['user_id']
+        success, message = delete_user(user_id)
+        
+        if success:
+            # 清除session
+            session.clear()
+            return jsonify({'success': True, 'message': message})
+        else:
+            return jsonify({'success': False, 'message': message}), 400
+    except Exception as e:
+        print(f'删除账户失败: {str(e)}')
+        return jsonify({'success': False, 'message': f'删除账户失败: {str(e)}'}), 500
+
+@app.route('/user/preferences', methods=['GET', 'POST'])
+def user_preferences():
+    """获取或设置用户偏好"""
+    try:
+        if 'user_id' not in session:
+            return jsonify({'success': False, 'message': '用户未登录'}), 401
+        
+        user_id = session['user_id']
+        
+        if request.method == 'GET':
+            # 获取偏好设置
+            preferences = get_user_preferences(user_id)
+            return jsonify({'success': True, 'data': preferences})
+        
+        elif request.method == 'POST':
+            # 设置偏好
+            data = request.get_json()
+            save_history = data.get('save_history')
+            
+            # 如果用户开启保存历史记录，先将内存中未保存的历史记录保存到数据库
+            if save_history and user_id in dialogue_state:
+                state = dialogue_state[user_id]
+                history = state.get('history', [])
+                
+                # 遍历历史记录，保存未保存的对话（每隔一条是用户消息，然后是机器人回复）
+                for i in range(0, len(history), 2):
+                    if i + 1 < len(history):
+                        user_msg = history[i]['content']
+                        bot_response = history[i+1]['content']
+                        # 检查是否已存在于数据库
+                        if not is_dialogue_exists(user_id, user_msg, bot_response):
+                            save_dialogue(user_id, user_msg, bot_response)
+            # 如果用户关闭保存历史记录，删除数据库中该用户的历史记录
+            elif save_history is False:
+                clear_user_history(user_id)
+            
+            success, message = set_user_preferences(user_id, save_history)
+            
+            if success:
+                return jsonify({'success': True, 'message': message})
+            else:
+                return jsonify({'success': False, 'message': message}), 400
+                
+    except Exception as e:
+        print(f'处理用户偏好失败: {str(e)}')
+        return jsonify({'success': False, 'message': f'处理失败: {str(e)}'}), 500
+
+@app.route('/user/clear-history', methods=['POST'])
+def clear_history():
+    """清除用户历史记录"""
+    try:
+        if 'user_id' not in session:
+            return jsonify({'success': False, 'message': '用户未登录'}), 401
+        
+        user_id = session['user_id']
+        success, message = clear_user_history(user_id)
+        
+        if success:
+            # 同时重置服务器端的对话状态，让用户重新开始对话
+            if user_id in dialogue_state:
+                del dialogue_state[user_id]
+            return jsonify({'success': True, 'message': message})
+        else:
+            return jsonify({'success': False, 'message': message}), 400
+            
+    except Exception as e:
+        print(f'清除历史记录失败: {str(e)}')
+        return jsonify({'success': False, 'message': f'清除失败: {str(e)}'}), 500
 
 # 收藏相关路由
 @app.route('/collection/add', methods=['POST'])

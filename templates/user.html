@@ -50,16 +50,22 @@
                     <div class="account-info">
                         <div class="info-row">
                             <span class="info-label">用户名</span>
-                            <div>
-                                <span class="info-value">{{ session['username'] }}</span>
-                                <button class="btn-secondary">编辑</button>
+                            <div class="info-value-wrapper">
+                                <span id="username-display" class="info-value">{{ session['username'] }}</span>
+                                <input type="text" id="username-input" class="info-input" value="{{ session['username'] }}" style="display: none;">
+                                <button id="username-edit" class="btn-secondary" onclick="startEdit('username')">编辑</button>
+                                <button id="username-save" class="btn-primary" style="display: none;" onclick="saveEdit('username')">保存</button>
+                                <button id="username-cancel" class="btn-secondary" style="display: none;" onclick="cancelEdit('username')">取消</button>
                             </div>
                         </div>
                         <div class="info-row">
                             <span class="info-label">邮箱</span>
-                            <div>
-                                <span class="info-value">{{ session['email'] }}</span>
-                                <button class="btn-secondary">编辑</button>
+                            <div class="info-value-wrapper">
+                                <span id="email-display" class="info-value">{{ session['email'] }}</span>
+                                <input type="email" id="email-input" class="info-input" value="{{ session['email'] }}" style="display: none;">
+                                <button id="email-edit" class="btn-secondary" onclick="startEdit('email')">编辑</button>
+                                <button id="email-save" class="btn-primary" style="display: none;" onclick="saveEdit('email')">保存</button>
+                                <button id="email-cancel" class="btn-secondary" style="display: none;" onclick="cancelEdit('email')">取消</button>
                             </div>
                         </div>
                         <div class="info-row">
@@ -110,7 +116,7 @@
                     <div class="account-info">
                         <div class="setting-item">
                             <span class="info-label">密码</span>
-                            <button class="btn-secondary">修改密码</button>
+                            <button class="btn-secondary" onclick="showChangePasswordModal()">修改密码</button>
                         </div>
                         <div class="setting-item">
                             <span class="info-label">通知</span>
@@ -121,11 +127,11 @@
                         </div>
                         <div class="setting-item">
                             <span class="info-label">隐私</span>
-                            <button class="btn-secondary">隐私设置</button>
+                            <button class="btn-secondary" onclick="showPrivacyModal()">隐私设置</button>
                         </div>
                         <div class="setting-item">
                             <span class="info-label">删除账户</span>
-                            <button class="btn-secondary" style="color: #ef4444;">删除</button>
+                            <button class="btn-danger" onclick="showDeleteAccountModal()">删除</button>
                         </div>
                     </div>
                 </div>
@@ -137,6 +143,80 @@
             <button class="btn-primary" onclick="history.back()">
                 <span>←</span> 返回推荐
             </button>
+        </div>
+    </div>
+
+    <!-- 修改密码模态框 -->
+    <div id="change-password-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>修改密码</h2>
+                <button class="close-btn" onclick="closeChangePasswordModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="old-password">旧密码</label>
+                    <input type="password" id="old-password" placeholder="请输入旧密码" required>
+                </div>
+                <div class="form-group">
+                    <label for="new-password">新密码</label>
+                    <input type="password" id="new-password" placeholder="请输入新密码（至少6个字符）" required>
+                </div>
+                <div id="change-password-message"></div>
+                <button class="btn-primary" onclick="changePassword()">确认修改</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 隐私设置模态框 -->
+    <div id="privacy-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>隐私设置</h2>
+                <button class="close-btn" onclick="closePrivacyModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="privacy-item">
+                    <div class="privacy-info">
+                        <span class="privacy-title">保存历史记录</span>
+                        <span class="privacy-desc">开启后会保存您的对话和学习历史</span>
+                    </div>
+                    <label class="switch">
+                        <input type="checkbox" id="save-history-switch">
+                        <span class="slider"></span>
+                    </label>
+                </div>
+                <hr style="margin: 20px 0; border: none; border-top: 1px solid #f1f5f9;">
+                <div class="privacy-item">
+                    <div class="privacy-info">
+                        <span class="privacy-title">清除历史记录</span>
+                        <span class="privacy-desc">清除所有对话历史记录</span>
+                    </div>
+                    <button class="btn-secondary" onclick="showClearHistoryConfirm()">清除</button>
+                </div>
+                <div id="privacy-message"></div>
+                <button class="btn-primary" onclick="savePrivacySettings()">保存设置</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 删除账户模态框 -->
+    <div id="delete-account-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>删除账户</h2>
+                <button class="close-btn" onclick="closeDeleteAccountModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p style="color: #ef4444; margin-bottom: 20px;">⚠️ 警告：此操作将永久删除您的账户及所有相关数据，且无法恢复！</p>
+                <p>请输入 "确认删除" 以确认此操作：</p>
+                <input type="text" id="delete-confirm" placeholder="请输入确认文字">
+                <div id="delete-account-message"></div>
+                <div style="display: flex; gap: 10px; margin-top: 20px;">
+                    <button class="btn-secondary" onclick="closeDeleteAccountModal()">取消</button>
+                    <button class="btn-danger" onclick="deleteAccount()">确认删除</button>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -250,6 +330,277 @@
                     console.error('取消收藏失败:', error);
                     alert('取消收藏失败，请稍后再试');
                 }
+            }
+        }
+        
+        // 开始编辑
+        function startEdit(field) {
+            document.getElementById(field + '-display').style.display = 'none';
+            document.getElementById(field + '-input').style.display = 'inline-block';
+            document.getElementById(field + '-edit').style.display = 'none';
+            document.getElementById(field + '-save').style.display = 'inline-block';
+            document.getElementById(field + '-cancel').style.display = 'inline-block';
+            
+            // 聚焦到输入框
+            document.getElementById(field + '-input').focus();
+        }
+        
+        // 取消编辑
+        function cancelEdit(field) {
+            // 恢复原始值
+            if (field === 'username') {
+                document.getElementById('username-input').value = document.getElementById('username-display').textContent;
+            } else if (field === 'email') {
+                document.getElementById('email-input').value = document.getElementById('email-display').textContent;
+            }
+            
+            document.getElementById(field + '-display').style.display = 'inline-block';
+            document.getElementById(field + '-input').style.display = 'none';
+            document.getElementById(field + '-edit').style.display = 'inline-block';
+            document.getElementById(field + '-save').style.display = 'none';
+            document.getElementById(field + '-cancel').style.display = 'none';
+        }
+        
+        // 保存编辑
+        async function saveEdit(field) {
+            const displayElement = document.getElementById(field + '-display');
+            const inputElement = document.getElementById(field + '-input');
+            const newValue = inputElement.value.trim();
+            
+            if (!newValue) {
+                alert('请输入内容');
+                return;
+            }
+            
+            if (field === 'email' && !isValidEmail(newValue)) {
+                alert('请输入有效的邮箱地址');
+                return;
+            }
+            
+            try {
+                const data = {};
+                data[field] = newValue;
+                
+                const response = await fetch('/user/update', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(data)
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    // 更新显示的值
+                    displayElement.textContent = newValue;
+                    
+                    // 更新页面上的用户信息显示
+                    if (field === 'username') {
+                        document.querySelector('.profile-info h2').textContent = newValue;
+                    } else if (field === 'email') {
+                        document.querySelector('.profile-info p').textContent = newValue;
+                    }
+                    
+                    alert('更新成功');
+                    cancelEdit(field);
+                } else {
+                    alert('更新失败: ' + result.message);
+                }
+            } catch (error) {
+                console.error('更新失败:', error);
+                alert('更新失败，请稍后再试');
+            }
+        }
+        
+        // 邮箱验证
+        function isValidEmail(email) {
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            return emailRegex.test(email);
+        }
+        
+        // 修改密码模态框
+        function showChangePasswordModal() {
+            document.getElementById('change-password-modal').style.display = 'block';
+        }
+        
+        function closeChangePasswordModal() {
+            document.getElementById('change-password-modal').style.display = 'none';
+            document.getElementById('change-password-message').textContent = '';
+            document.getElementById('old-password').value = '';
+            document.getElementById('new-password').value = '';
+        }
+        
+        async function changePassword() {
+            const oldPassword = document.getElementById('old-password').value;
+            const newPassword = document.getElementById('new-password').value;
+            const messageDiv = document.getElementById('change-password-message');
+            
+            if (!oldPassword || !newPassword) {
+                messageDiv.textContent = '请输入旧密码和新密码';
+                messageDiv.style.color = 'red';
+                return;
+            }
+            
+            if (newPassword.length < 6) {
+                messageDiv.textContent = '密码至少6个字符';
+                messageDiv.style.color = 'red';
+                return;
+            }
+            
+            try {
+                const response = await fetch('/user/change-password', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ old_password: oldPassword, new_password: newPassword })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    messageDiv.textContent = result.message;
+                    messageDiv.style.color = 'green';
+                    setTimeout(() => {
+                        closeChangePasswordModal();
+                    }, 1500);
+                } else {
+                    messageDiv.textContent = result.message;
+                    messageDiv.style.color = 'red';
+                }
+            } catch (error) {
+                console.error('修改密码失败:', error);
+                messageDiv.textContent = '修改密码失败，请稍后再试';
+                messageDiv.style.color = 'red';
+            }
+        }
+        
+        // 删除账户模态框
+        function showDeleteAccountModal() {
+            document.getElementById('delete-account-modal').style.display = 'block';
+        }
+        
+        function closeDeleteAccountModal() {
+            document.getElementById('delete-account-modal').style.display = 'none';
+            document.getElementById('delete-confirm').value = '';
+            document.getElementById('delete-account-message').textContent = '';
+        }
+        
+        async function deleteAccount() {
+            const confirmText = document.getElementById('delete-confirm').value;
+            const messageDiv = document.getElementById('delete-account-message');
+            
+            if (confirmText !== '确认删除') {
+                messageDiv.textContent = '请输入正确的确认文字';
+                messageDiv.style.color = 'red';
+                return;
+            }
+            
+            try {
+                const response = await fetch('/user/delete', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'}
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    messageDiv.textContent = result.message;
+                    messageDiv.style.color = 'green';
+                    setTimeout(() => {
+                        window.location.href = '/login';
+                    }, 1500);
+                } else {
+                    messageDiv.textContent = result.message;
+                    messageDiv.style.color = 'red';
+                }
+            } catch (error) {
+                console.error('删除账户失败:', error);
+                messageDiv.textContent = '删除账户失败，请稍后再试';
+                messageDiv.style.color = 'red';
+            }
+        }
+        
+        // 隐私设置模态框
+        async function showPrivacyModal() {
+            document.getElementById('privacy-modal').style.display = 'block';
+            document.getElementById('privacy-message').textContent = '';
+            
+            // 获取当前设置
+            try {
+                const response = await fetch('/user/preferences', {
+                    method: 'GET'
+                });
+                const result = await response.json();
+                
+                if (result.success) {
+                    document.getElementById('save-history-switch').checked = result.data.save_history;
+                }
+            } catch (error) {
+                console.error('获取隐私设置失败:', error);
+            }
+        }
+        
+        function closePrivacyModal() {
+            document.getElementById('privacy-modal').style.display = 'none';
+            document.getElementById('privacy-message').textContent = '';
+        }
+        
+        async function savePrivacySettings() {
+            const saveHistory = document.getElementById('save-history-switch').checked;
+            const messageDiv = document.getElementById('privacy-message');
+            
+            try {
+                const response = await fetch('/user/preferences', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ save_history: saveHistory })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    messageDiv.textContent = result.message;
+                    messageDiv.style.color = 'green';
+                    setTimeout(() => {
+                        closePrivacyModal();
+                    }, 1000);
+                } else {
+                    messageDiv.textContent = result.message;
+                    messageDiv.style.color = 'red';
+                }
+            } catch (error) {
+                console.error('保存隐私设置失败:', error);
+                messageDiv.textContent = '保存失败，请稍后再试';
+                messageDiv.style.color = 'red';
+            }
+        }
+        
+        function showClearHistoryConfirm() {
+            if (confirm('确定要清除所有历史记录吗？此操作不可恢复。')) {
+                clearHistory();
+            }
+        }
+        
+        async function clearHistory() {
+            const messageDiv = document.getElementById('privacy-message');
+            
+            try {
+                const response = await fetch('/user/clear-history', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'}
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    messageDiv.textContent = result.message;
+                    messageDiv.style.color = 'green';
+                } else {
+                    messageDiv.textContent = result.message;
+                    messageDiv.style.color = 'red';
+                }
+            } catch (error) {
+                console.error('清除历史记录失败:', error);
+                messageDiv.textContent = '清除失败，请稍后再试';
+                messageDiv.style.color = 'red';
             }
         }
     </script>
