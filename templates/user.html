@@ -92,19 +92,19 @@
                     <h2 class="section-title">学习统计</h2>
                     <div class="stats-grid">
                         <div class="stat-card">
-                            <h3 class="stat-value">0</h3>
+                            <h3 class="stat-value" id="stat-learned">0</h3>
                             <p class="stat-label">已学习资源</p>
                         </div>
                         <div class="stat-card">
-                            <h3 class="stat-value">0</h3>
+                            <h3 class="stat-value" id="stat-hours">0</h3>
                             <p class="stat-label">学习小时数</p>
                         </div>
                         <div class="stat-card">
-                            <h3 class="stat-value">0</h3>
+                            <h3 class="stat-value" id="stat-collections">0</h3>
                             <p class="stat-label">收藏资源</p>
                         </div>
                         <div class="stat-card">
-                            <h3 class="stat-value">0%</h3>
+                            <h3 class="stat-value" id="stat-completion">0%</h3>
                             <p class="stat-label">完成率</p>
                         </div>
                     </div>
@@ -265,6 +265,28 @@
             // 如果是收藏区域，加载收藏列表
             if (sectionId === 'collections') {
                 loadCollections();
+            }
+            
+            // 如果是学习统计区域，加载学习统计数据
+            if (sectionId === 'learning') {
+                loadLearningStats();
+            }
+        }
+        
+        // 加载学习统计数据
+        async function loadLearningStats() {
+            try {
+                const response = await fetch('/api/learning-stats');
+                const data = await response.json();
+                
+                if (data.success) {
+                    document.getElementById('stat-learned').textContent = data.data.learned_resources;
+                    document.getElementById('stat-hours').textContent = data.data.learning_hours + 'h';
+                    document.getElementById('stat-collections').textContent = data.data.collections;
+                    document.getElementById('stat-completion').textContent = data.data.completion_rate + '%';
+                }
+            } catch (error) {
+                console.error('加载学习统计失败:', error);
             }
         }
         

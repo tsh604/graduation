@@ -83,7 +83,27 @@ def init_database():
         CREATE TABLE IF NOT EXISTS user_preferences (
             user_id INTEGER PRIMARY KEY,
             save_history INTEGER DEFAULT 1,
-            FOREIGN KEY (user_id) REFERENCES users(id)
+            current_learning_resource_id INTEGER,
+            current_learning_status TEXT DEFAULT 'idle',
+            current_learning_duration INTEGER DEFAULT 0,
+            FOREIGN KEY (user_id) REFERENCES users(id),
+            FOREIGN KEY (current_learning_resource_id) REFERENCES resources(id)
+        )
+    ''')
+    
+    # 创建学习记录表
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS learning_records (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            resource_id INTEGER NOT NULL,
+            start_time DATETIME,
+            end_time DATETIME,
+            duration INTEGER DEFAULT 0,
+            progress REAL DEFAULT 0.0,
+            completed INTEGER DEFAULT 0,
+            FOREIGN KEY (user_id) REFERENCES users(id),
+            FOREIGN KEY (resource_id) REFERENCES resources(id)
         )
     ''')
     
@@ -623,7 +643,84 @@ def set_user_preferences(user_id, save_history=None):
     except Exception as e:
         print(f"设置用户偏好失败: {e}")
         conn.rollback()
-        return False, f"设置失败: {e}"
+
+def get_current_learning_state(user_id):
+    """获取用户当前学习状态"""
+    conn = sqlite3.connect('data/learning.db')
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute('''
+            SELECT current_learning_resource_id, current_learning_status, current_learning_duration, current_learning_resource_name
+            FROM user_preferences 
+            WHERE user_id = ?
+        ''', (user_id,))
+        result = cursor.fetchone()
+        
+        if result:
+            return {
+                'resource_id': result[0],
+                'status': result[1],
+                'duration': result[2] or 0,
+                'resource_name': result[3]
+            }
+        return None
+    except Exception as e:
+        print(f"获取学习状态失败: {e}")
+        return None
+    finally:
+        conn.close()
+
+def update_learning_state(user_id, resource_id, status, duration=0, resource_name=None):
+    """更新用户学习状态"""
+    conn = sqlite3.connect('data/learning.db')
+    cursor = conn.cursor()
+    
+    try:
+        # 先检查是否已有记录
+        cursor.execute('SELECT * FROM user_preferences WHERE user_id = ?', (user_id,))
+        result = cursor.fetchone()
+        
+        if result:
+            # 更新现有记录
+            cursor.execute('''
+                UPDATE user_preferences 
+                SET current_learning_resource_id = ?, current_learning_status = ?, current_learning_duration = ?, current_learning_resource_name = ?
+                WHERE user_id = ?
+            ''', (resource_id, status, duration, resource_name, user_id))
+        else:
+            # 插入新记录
+            cursor.execute('''
+                INSERT INTO user_preferences (user_id, save_history, current_learning_resource_id, current_learning_status, current_learning_duration, current_learning_resource_name)
+                VALUES (?, 1, ?, ?, ?, ?)
+            ''', (user_id, resource_id, status, duration, resource_name))
+        
+        conn.commit()
+        return True, "学习状态已更新"
+    except Exception as e:
+        print(f"更新学习状态失败: {e}")
+        conn.rollback()
+        return False, f"更新失败: {e}"
+    finally:
+        conn.close()
+
+def clear_learning_state(user_id):
+    """清除用户学习状态（登出时调用）"""
+    conn = sqlite3.connect('data/learning.db')
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute('''
+            UPDATE user_preferences 
+            SET current_learning_resource_id = NULL, current_learning_status = 'idle', current_learning_duration = 0
+            WHERE user_id = ?
+        ''', (user_id,))
+        conn.commit()
+        return True, "学习状态已清除"
+    except Exception as e:
+        print(f"清除学习状态失败: {e}")
+        conn.rollback()
+        return False, f"清除失败: {e}"
     finally:
         conn.close()
 
@@ -756,6 +853,160 @@ def get_user_collections(user_id):
     except Exception as e:
         print(f"获取收藏列表失败: {e}")
         return []
+
+def create_learning_record(user_id, resource_id):
+    """创建或复用学习记录（学习同一资源时复用已有记录）"""
+    conn = sqlite3.connect('data/learning.db')
+    cursor = conn.cursor()
+    
+    try:
+        # 先检查是否已有该资源的记录（无论是否完成）
+        cursor.execute('''
+            SELECT id, end_time FROM learning_records 
+            WHERE user_id = ? AND resource_id = ?
+            ORDER BY start_time DESC
+            LIMIT 1
+        ''', (user_id, resource_id))
+        existing = cursor.fetchone()
+        
+        if existing:
+            # 已有记录，检查是否已完成
+            record_id, end_time = existing
+            
+            if end_time is not None:
+                # 记录已完成，重新激活它（清除结束时间，更新开始时间）
+                cursor.execute('''
+                    UPDATE learning_records 
+                    SET start_time = CURRENT_TIMESTAMP, end_time = NULL, duration = 0, progress = 0, completed = 0
+                    WHERE id = ?
+                ''', (record_id,))
+                conn.commit()
+                return True, "学习记录已重新激活"
+            else:
+                # 已有未完成的记录，直接返回成功
+                return True, "已有学习记录"
+        
+        # 创建新记录
+        cursor.execute('''
+            INSERT INTO learning_records (user_id, resource_id, start_time)
+            VALUES (?, ?, CURRENT_TIMESTAMP)
+        ''', (user_id, resource_id))
+        conn.commit()
+        return True, "学习记录已创建"
+    except Exception as e:
+        print(f"创建学习记录失败: {e}")
+        conn.rollback()
+        return False, f"创建失败: {e}"
+    finally:
+        conn.close()
+
+def update_learning_record(user_id, resource_id, duration, completed=0, progress=0.0):
+    """更新学习记录（更新现有记录，不创建新记录）"""
+    conn = sqlite3.connect('data/learning.db')
+    cursor = conn.cursor()
+    
+    try:
+        # 获取资源的总学习时长（小时）
+        cursor.execute('''
+            SELECT learning_time FROM resources WHERE id = ?
+        ''', (resource_id,))
+        resource = cursor.fetchone()
+        total_time_hours = resource[0] if resource and resource[0] else 60  # 默认60小时
+        
+        # 将学习时长（分钟）转换为小时
+        duration_hours = duration / 60
+        
+        # 计算进度：(实际学习时长(小时) / 资源总时长(小时)) * 100，保留两位小数
+        if total_time_hours > 0:
+            calculated_progress = round(min(100, (duration_hours / total_time_hours) * 100), 2)
+        else:
+            calculated_progress = 0.0
+        
+        cursor.execute('''
+            UPDATE learning_records 
+            SET duration = ?, progress = ?
+            WHERE user_id = ? AND resource_id = ? AND end_time IS NULL
+        ''', (duration, calculated_progress, user_id, resource_id))
+        conn.commit()
+        return True, "学习记录已更新"
+    except Exception as e:
+        print(f"更新学习记录失败: {e}")
+        conn.rollback()
+        return False, f"更新失败: {e}"
+    finally:
+        conn.close()
+
+def complete_learning_record(user_id, resource_id, duration, completed=0, progress=0.0):
+    """完成学习记录（设置结束时间）"""
+    conn = sqlite3.connect('data/learning.db')
+    cursor = conn.cursor()
+    
+    try:
+        # 获取资源的总学习时长（小时）
+        cursor.execute('''
+            SELECT learning_time FROM resources WHERE id = ?
+        ''', (resource_id,))
+        resource = cursor.fetchone()
+        total_time_hours = resource[0] if resource and resource[0] else 60  # 默认60小时
+        
+        # 将学习时长（分钟）转换为小时
+        duration_hours = duration / 60
+        
+        # 计算进度：(实际学习时长(小时) / 资源总时长(小时)) * 100，保留两位小数
+        if total_time_hours > 0:
+            calculated_progress = round(min(100, (duration_hours / total_time_hours) * 100), 2)
+        else:
+            calculated_progress = 0.0
+        
+        cursor.execute('''
+            UPDATE learning_records 
+            SET end_time = CURRENT_TIMESTAMP, duration = ?, progress = ?, completed = ?
+            WHERE user_id = ? AND resource_id = ? AND end_time IS NULL
+        ''', (duration, calculated_progress, completed, user_id, resource_id))
+        conn.commit()
+        return True, "学习记录已完成"
+    except Exception as e:
+        print(f"完成学习记录失败: {e}")
+        conn.rollback()
+        return False, f"完成失败: {e}"
+    finally:
+        conn.close()
+
+def get_learning_stats(user_id):
+    """获取用户学习统计"""
+    conn = sqlite3.connect('data/learning.db')
+    cursor = conn.cursor()
+    
+    try:
+        # 已学习资源数（去重）
+        cursor.execute('SELECT COUNT(DISTINCT resource_id) FROM learning_records WHERE user_id = ?', (user_id,))
+        learned_count = cursor.fetchone()[0] or 0
+        
+        # 总学习时长（分钟）
+        cursor.execute('SELECT SUM(duration) FROM learning_records WHERE user_id = ?', (user_id,))
+        total_minutes = cursor.fetchone()[0] or 0
+        
+        # 完成的资源数
+        cursor.execute('SELECT COUNT(DISTINCT resource_id) FROM learning_records WHERE user_id = ? AND completed = 1', (user_id,))
+        completed_count = cursor.fetchone()[0] or 0
+        
+        # 完成率
+        completion_rate = round((completed_count / learned_count) * 100) if learned_count > 0 else 0
+        
+        return {
+            'learned_count': learned_count,
+            'total_hours': round(total_minutes / 60, 1),
+            'completed_count': completed_count,
+            'completion_rate': completion_rate
+        }
+    except Exception as e:
+        print(f"获取学习统计失败: {e}")
+        return {
+            'learned_count': 0,
+            'total_hours': 0,
+            'completed_count': 0,
+            'completion_rate': 0
+        }
     finally:
         conn.close()
 

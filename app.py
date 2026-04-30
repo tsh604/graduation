@@ -2,7 +2,7 @@
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for
 import sqlite3
 import uuid
-from database import init_database, save_dialogue, clear_user_dialogues, register_user, verify_user, get_user_by_email, add_collection, remove_collection, get_user_collections, check_collection, update_user, update_password, delete_user, get_user_preferences, set_user_preferences, clear_user_history, get_user_dialogues, is_dialogue_exists
+from database import init_database, save_dialogue, clear_user_dialogues, register_user, verify_user, get_user_by_email, add_collection, remove_collection, get_user_collections, check_collection, update_user, update_password, delete_user, get_user_preferences, set_user_preferences, clear_user_history, get_user_dialogues, is_dialogue_exists, get_learning_stats, create_learning_record, update_learning_record, complete_learning_record, get_current_learning_state, update_learning_state, clear_learning_state
 from recommender import Recommender
 from path_planner import generate_learning_plan, get_learning_efficiency_tips
 import json
@@ -1403,6 +1403,23 @@ def logout():
         if user_id in dialogue_state:
             del dialogue_state[user_id]
         
+        # 如果有未完成的学习记录，先完成它
+        if user_id != 'unknown':
+            # 获取当前学习状态
+            learning_state = get_current_learning_state(user_id)
+            if learning_state and learning_state['resource_id']:
+                # 完成学习记录
+                complete_learning_record(
+                    user_id, 
+                    learning_state['resource_id'], 
+                    learning_state['duration'], 
+                    0,  # completed
+                    learning_state.get('progress', 50.0)
+                )
+            
+            # 清除数据库中的学习状态
+            update_learning_state(user_id, None, 'idle', 0)
+        
         # 清空推荐得分表
         conn = sqlite3.connect('data/learning.db')
         cursor = conn.cursor()
@@ -1709,6 +1726,149 @@ def check_collection_route():
         }), 200
     except Exception as e:
         return jsonify({'success': False, 'message': f'检查收藏状态失败: {str(e)}'}), 500
+
+@app.route('/api/learning-stats', methods=['GET'])
+def api_learning_stats():
+    """获取学习统计数据"""
+    try:
+        if 'user_id' not in session:
+            return jsonify({'success': False, 'message': '未登录'}), 401
+        
+        user_id = session['user_id']
+        
+        # 获取学习统计
+        stats = get_learning_stats(user_id)
+        
+        # 获取收藏数量
+        collections = get_user_collections(user_id)
+        collection_count = len(collections)
+        
+        return jsonify({
+            'success': True,
+            'data': {
+                'learned_resources': stats['learned_count'],
+                'learning_hours': stats['total_hours'],
+                'collections': collection_count,
+                'completion_rate': stats['completion_rate']
+            }
+        }), 200
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'获取学习统计失败: {str(e)}'}), 500
+
+@app.route('/api/start-learning', methods=['POST'])
+def api_start_learning():
+    """开始学习资源"""
+    try:
+        if 'user_id' not in session:
+            return jsonify({'success': False, 'message': '未登录'}), 401
+        
+        data = request.get_json()
+        resource_id = data.get('resource_id')
+        resource_name = data.get('resource_name')
+        duration = data.get('duration', 0)
+        
+        if not resource_id:
+            return jsonify({'success': False, 'message': '资源ID不能为空'}), 400
+        
+        user_id = session['user_id']
+        success, message = create_learning_record(user_id, resource_id)
+        
+        if success:
+            # 更新学习状态为学习中（包含资源名称）
+            update_learning_state(user_id, resource_id, 'learning', duration, resource_name)
+        
+        return jsonify({
+            'success': success,
+            'message': message
+        }), 200 if success else 400
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'开始学习失败: {str(e)}'}), 500
+
+@app.route('/api/learning-state', methods=['GET'])
+def api_get_learning_state():
+    """获取当前学习状态"""
+    try:
+        if 'user_id' not in session:
+            return jsonify({'success': False, 'message': '未登录'}), 401
+        
+        user_id = session['user_id']
+        state = get_current_learning_state(user_id)
+        
+        return jsonify({
+            'success': True,
+            'data': state
+        }), 200
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'获取学习状态失败: {str(e)}'}), 500
+
+@app.route('/api/pause-learning', methods=['POST'])
+def api_pause_learning():
+    """暂停学习资源（更新现有记录，不创建新记录）"""
+    try:
+        if 'user_id' not in session:
+            return jsonify({'success': False, 'message': '未登录'}), 401
+        
+        # 支持 sendBeacon 和普通 JSON 请求
+        if request.content_type == 'application/json':
+            data = request.get_json()
+        else:
+            # sendBeacon 可能发送的是 text/plain
+            data = json.loads(request.data.decode('utf-8'))
+        
+        resource_id = data.get('resource_id')
+        duration = data.get('duration', 0)
+        progress = data.get('progress', 50.0)
+        
+        if not resource_id:
+            return jsonify({'success': False, 'message': '资源ID不能为空'}), 400
+        
+        user_id = session['user_id']
+        
+        # 更新学习记录（使用新的update函数，只更新不创建）
+        success, message = update_learning_record(user_id, resource_id, duration, 0, progress)
+        
+        if success:
+            # 更新学习状态为暂停
+            update_learning_state(user_id, resource_id, 'paused', duration)
+        
+        return jsonify({
+            'success': success,
+            'message': message
+        }), 200 if success else 400
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'暂停学习失败: {str(e)}'}), 500
+
+@app.route('/api/end-learning', methods=['POST'])
+def api_end_learning():
+    """结束学习资源（完成记录）"""
+    try:
+        if 'user_id' not in session:
+            return jsonify({'success': False, 'message': '未登录'}), 401
+        
+        data = request.get_json()
+        resource_id = data.get('resource_id')
+        duration = data.get('duration', 0)
+        completed = data.get('completed', False)
+        progress = data.get('progress', 100.0 if completed else 50.0)
+        
+        if not resource_id:
+            return jsonify({'success': False, 'message': '资源ID不能为空'}), 400
+        
+        user_id = session['user_id']
+        
+        # 完成学习记录（设置结束时间）
+        success, message = complete_learning_record(user_id, resource_id, duration, 1 if completed else 0, progress)
+        
+        if success:
+            # 清除学习状态
+            update_learning_state(user_id, None, 'idle', 0)
+        
+        return jsonify({
+            'success': success,
+            'message': message
+        }), 200 if success else 400
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'结束学习失败: {str(e)}'}), 500
 
 if __name__ == '__main__':
     # 清空对话状态

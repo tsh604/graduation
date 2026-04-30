@@ -261,6 +261,7 @@ function addMessage(content, sender) {
                         <span class="resource-tag">${type}</span>
                         <span class="resource-title">${title.trim()}</span>
                         <button class="collection-btn" onclick="addCollection(${resourceId})"><span>⭐</span> 收藏</button>
+                        <button class="learn-btn" onclick="startLearning(${resourceId}, '${title.trim()}', this)"><span>📖</span> 开始学习</button>
                     </div>
                     <a href="${url}" target="_blank" class="resource-url">${url}</a>
                 </div>
@@ -287,6 +288,13 @@ function addMessage(content, sender) {
     
     messagesDiv.appendChild(messageDiv);
     messagesDiv.scrollTop = messagesDiv.scrollHeight;
+    
+    // 如果是机器人消息，检查是否包含资源列表，并恢复学习状态
+    if (sender === 'bot') {
+        setTimeout(() => {
+            loadLearningState();
+        }, 100);
+    }
 }
 
 // 格式化链接为可点击状态
@@ -571,6 +579,7 @@ function formatRecommendations(content) {
                             <span class="resource-tag">${type}</span>
                             <span class="resource-title">${title || '学习资源'}</span>
                             <button class="collection-btn" onclick="addCollection(${resourceId})"><span>⭐</span> 收藏</button>
+                            <button class="learn-btn" onclick="startLearning(${resourceId}, '${title}', this)"><span>📖</span> 开始学习</button>
                         </div>
                         <a href="${url}" target="_blank" class="resource-url">${url}</a>
                     </div>
@@ -878,6 +887,7 @@ async function loadHistory() {
                                     <span class="resource-tag">${type}</span>
                                     <span class="resource-title">${title.trim()}</span>
                                     <button class="collection-btn" onclick="addCollection(${resourceId})"><span>⭐</span> 收藏</button>
+                                    <button class="learn-btn" onclick="startLearning(${resourceId}, '${title.trim()}', this)"><span>📖</span> 开始学习</button>
                                 </div>
                                 <a href="${url}" class="resource-link" target="_blank">${url}</a>
                             </div>
@@ -1083,6 +1093,209 @@ async function addCollection(resourceId) {
         console.error('添加收藏失败:', error);
         alert('添加收藏失败，请稍后再试');
     }
+}
+
+// 学习计时器
+let learningTimer = null;
+let learningDuration = 0;
+let currentResourceId = null;
+let currentResourceTitle = null;
+let currentLearnBtn = null;
+
+// 页面加载时恢复学习状态
+document.addEventListener('DOMContentLoaded', () => {
+    // 延迟执行，确保DOM渲染完成
+    setTimeout(() => {
+        loadLearningState();
+    }, 500);
+});
+
+// 加载学习状态
+async function loadLearningState() {
+    try {
+        const response = await fetch('/api/learning-state');
+        const data = await response.json();
+        
+        if (data.success && data.data) {
+            const state = data.data;
+            
+            if (state.resource_id && state.status === 'learning') {
+                currentResourceId = state.resource_id;
+                currentResourceTitle = state.resource_name || '未知资源';
+                learningDuration = state.duration || 0;
+                
+                // 重新开始计时
+                learningTimer = setInterval(() => {
+                    learningDuration++;
+                }, 60000);
+                
+                window.addEventListener('beforeunload', handleBeforeUnload);
+                
+                // 更新对应按钮的状态
+                updateLearnButtonState(state.resource_id, 'learning');
+            } else if (state.resource_id && state.status === 'paused') {
+                currentResourceId = state.resource_id;
+                currentResourceTitle = state.resource_name || '未知资源';
+                learningDuration = state.duration || 0;
+                
+                // 更新对应按钮的状态为暂停
+                updateLearnButtonState(state.resource_id, 'paused');
+            }
+        }
+    } catch (error) {
+        console.error('加载学习状态失败:', error);
+    }
+}
+
+// 更新学习按钮状态
+function updateLearnButtonState(resourceId, status) {
+    const buttons = document.querySelectorAll('.learn-btn');
+    buttons.forEach(btn => {
+        const onclickStr = btn.getAttribute('onclick');
+        if (onclickStr && onclickStr.includes(`startLearning(${resourceId}`)) {
+            currentLearnBtn = btn;
+            
+            if (status === 'learning') {
+                btn.innerHTML = '<span>⏸️</span> 暂停学习';
+                btn.onclick = function() { pauseLearning(); };
+                btn.classList.add('learning');
+            } else if (status === 'paused') {
+                btn.innerHTML = '<span>▶️</span> 继续学习';
+                btn.onclick = function() { startLearning(resourceId, '', btn); };
+                btn.classList.remove('learning');
+            }
+        }
+    });
+}
+
+// 开始学习
+async function startLearning(resourceId, resourceTitle, btnElement) {
+    try {
+        const response = await fetch('/api/start-learning', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({resource_id: resourceId, resource_name: resourceTitle})
+        });
+        const data = await response.json();
+        
+        if (data.success) {
+            currentResourceId = resourceId;
+            currentResourceTitle = resourceTitle;
+            currentLearnBtn = btnElement;
+            learningDuration = 0;
+            
+            // 开始计时
+            learningTimer = setInterval(() => {
+                learningDuration++;
+            }, 60000); // 每分钟更新一次
+            
+            // 更新按钮状态为"暂停学习"
+            btnElement.innerHTML = '<span>⏸️</span> 暂停学习';
+            btnElement.onclick = function() { pauseLearning(); };
+            btnElement.classList.add('learning');
+            
+            alert(`开始学习「${resourceTitle}」！学习时长将被记录。`);
+            
+            // 提示用户关闭标签页时结束学习
+            window.addEventListener('beforeunload', handleBeforeUnload);
+        } else {
+            alert('开始学习失败: ' + data.message);
+        }
+    } catch (error) {
+        console.error('开始学习失败:', error);
+        alert('开始学习失败，请稍后再试');
+    }
+}
+
+// 暂停学习
+async function pauseLearning() {
+    if (!currentResourceId || learningTimer === null) {
+        return;
+    }
+    
+    try {
+        const response = await fetch('/api/pause-learning', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                resource_id: currentResourceId,
+                duration: learningDuration,
+                progress: 50.0
+            })
+        });
+        const data = await response.json();
+        
+        if (data.success) {
+            alert(`学习已暂停！本次学习时长：${learningDuration}分钟`);
+        } else {
+            alert('暂停学习失败: ' + data.message);
+        }
+    } catch (error) {
+        console.error('暂停学习失败:', error);
+    } finally {
+        // 清除计时器
+        clearInterval(learningTimer);
+        learningTimer = null;
+        
+        // 更新按钮状态为"继续学习"
+        if (currentLearnBtn) {
+            currentLearnBtn.innerHTML = `<span>▶️</span> 继续学习`;
+            currentLearnBtn.onclick = function() { startLearning(currentResourceId, currentResourceTitle, currentLearnBtn); };
+            currentLearnBtn.classList.remove('learning');
+        }
+    }
+}
+
+// 结束学习
+async function endLearning(completed = false) {
+    if (!currentResourceId || learningTimer === null) {
+        return;
+    }
+    
+    try {
+        const response = await fetch('/api/end-learning', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                resource_id: currentResourceId,
+                duration: learningDuration,
+                completed: completed ? 1 : 0,
+                progress: completed ? 100 : 50
+            })
+        });
+        const data = await response.json();
+        
+        if (data.success) {
+            alert(`学习结束！本次学习时长：${learningDuration}分钟`);
+        } else {
+            alert('结束学习失败: ' + data.message);
+        }
+    } catch (error) {
+        console.error('结束学习失败:', error);
+    } finally {
+        // 清除计时器
+        clearInterval(learningTimer);
+        learningTimer = null;
+        learningDuration = 0;
+        currentResourceId = null;
+        currentResourceTitle = null;
+        
+        // 恢复按钮状态为"开始学习"
+        if (currentLearnBtn) {
+            currentLearnBtn.innerHTML = '<span>📖</span> 开始学习';
+            currentLearnBtn.onclick = function() { startLearning(currentResourceId, currentResourceTitle, currentLearnBtn); };
+            currentLearnBtn.classList.remove('learning');
+            currentLearnBtn = null;
+        }
+        
+        window.removeEventListener('beforeunload', handleBeforeUnload);
+    }
+}
+
+// 页面关闭前处理 - 只在登出时清除状态
+function handleBeforeUnload(event) {
+    // 页面切换时不暂停学习，保持学习状态
+    // 只有明确点击暂停按钮才暂停
 }
 
 // 取消收藏

@@ -1988,33 +1988,31 @@ class PathPlanner:
                         break
                 filtered_resources = new_resources
             
-            # 重新初始化随机数生成器的种子值，确保每次生成的学习时间都不同
-            random.seed()
-            
-            # 根据资源的难度为每个资源生成随机学习时间
+            # 使用数据库中已有的学习时间值（不重新生成）
             learning_time = 0
             for res in filtered_resources:
-                # 获取资源难度
-                difficulty = res[4] if len(res) >= 5 else '初级'
-                # 根据难度生成随机学习时间
-                if difficulty == '初级':
-                    resource_time = random.randint(40, 60)
-                elif difficulty == '中级':
-                    resource_time = random.randint(60, 80)
-                elif difficulty == '高级':
-                    resource_time = random.randint(80, 100)
-                else:
-                    resource_time = 50
+                # 获取数据库中已有的学习时间（第8个字段，索引7）
+                resource_time = 0
+                if len(res) >= 8 and res[7]:
+                    try:
+                        resource_time = float(res[7])
+                    except (ValueError, TypeError):
+                        resource_time = 0
+                
+                # 如果数据库中没有值，使用默认值
+                if resource_time <= 0:
+                    difficulty = res[4] if len(res) >= 5 else '初级'
+                    if difficulty == '初级':
+                        resource_time = 50
+                    elif difficulty == '中级':
+                        resource_time = 70
+                    elif difficulty == '高级':
+                        resource_time = 90
+                    else:
+                        resource_time = 50
+                
                 learning_time += resource_time
                 
-                # 更新resource表中的learning_time字段
-                conn = sqlite3.connect(self.db_path)
-                cursor = conn.cursor()
-                cursor.execute('''
-                    UPDATE resources SET learning_time = ? WHERE id = ?
-                ''', (resource_time, res[0]))
-                conn.commit()
-                conn.close()
             total_time += learning_time
             
             # 计算需要的周数，保留小数点后一位
