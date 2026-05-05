@@ -2,7 +2,7 @@
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for
 import sqlite3
 import uuid
-from database import init_database, save_dialogue, clear_user_dialogues, register_user, verify_user, get_user_by_email, add_collection, remove_collection, get_user_collections, check_collection, update_user, update_password, delete_user, get_user_preferences, set_user_preferences, clear_user_history, get_user_dialogues, is_dialogue_exists, get_learning_stats, create_learning_record, update_learning_record, complete_learning_record, get_current_learning_state, update_learning_state, clear_learning_state
+from database import init_database, save_dialogue, clear_user_dialogues, register_user, verify_user, get_user_by_email, get_user_by_id, add_collection, remove_collection, get_user_collections, check_collection, update_user, update_password, reset_password_by_email, delete_user, get_user_preferences, set_user_preferences, clear_user_history, get_user_dialogues, is_dialogue_exists, get_learning_stats, create_learning_record, update_learning_record, complete_learning_record, get_current_learning_state, update_learning_state, clear_learning_state, checkin_user, get_checkin_status
 from recommender import Recommender
 from path_planner import generate_learning_plan, get_learning_efficiency_tips
 import json
@@ -59,6 +59,60 @@ def get_llm():
 
 # 存储对话状态的字典
 dialogue_state = {}
+
+# 存储验证码的字典 {email: {'code': '123456', 'expire_time': timestamp}}
+verification_codes = {}
+
+import random
+import string
+from datetime import datetime, timedelta
+
+def generate_verification_code():
+    """生成6位数字验证码"""
+    return ''.join(random.choices(string.digits, k=6))
+
+def send_verification_code(email):
+    """发送验证码"""
+    if email not in verification_codes:
+        verification_codes[email] = {}
+    
+    code = generate_verification_code()
+    expire_time = datetime.now() + timedelta(minutes=5)
+    
+    verification_codes[email] = {
+        'code': code,
+        'expire_time': expire_time,
+        'attempts': 0
+    }
+    
+    return code
+
+def verify_code(email, code):
+    """验证验证码是否正确"""
+    if email not in verification_codes:
+        return False, "验证码不存在或已过期"
+    
+    record = verification_codes[email]
+    
+    # 检查是否过期
+    if datetime.now() > record['expire_time']:
+        del verification_codes[email]
+        return False, "验证码已过期，请重新获取"
+    
+    # 检查尝试次数
+    if record['attempts'] >= 3:
+        del verification_codes[email]
+        return False, "验证失败次数过多，请重新获取验证码"
+    
+    # 验证是否正确
+    if record['code'] != code:
+        record['attempts'] += 1
+        remaining = 3 - record['attempts']
+        return False, f"验证码错误，剩余 {remaining} 次尝试"
+    
+    # 验证成功后删除验证码
+    del verification_codes[email]
+    return True, "验证成功"
 
 class DialogueManager:
     """对话管理器 - 实现多轮追问"""
@@ -1152,7 +1206,7 @@ def reset_conversation():
         del dialogue_state[user_id]
         print(f"用户 {user_id} 的对话已重置")
     
-    # 清空当前用户的对话历史（只清空当前用户，不是所有用户）
+    # 清空当前用户的对话历史（只清空当前用户，不影响其他用户）
     clear_user_history(user_id)
     
     session.pop('_flashes', None)
@@ -1394,6 +1448,70 @@ def login():
     except Exception as e:
         return jsonify({'success': False, 'message': f'登录失败: {str(e)}'}), 500
 
+@app.route('/send-code', methods=['POST'])
+def send_code():
+    """发送验证码到邮箱"""
+    try:
+        data = request.get_json()
+        email = data.get('email')
+        
+        if not email:
+            return jsonify({'success': False, 'message': '请输入邮箱地址'}), 400
+        
+        # 检查邮箱是否存在
+        user = get_user_by_email(email)
+        if not user:
+            return jsonify({'success': False, 'message': '该邮箱未注册'}), 400
+        
+        # 发送验证码
+        code = send_verification_code(email)
+        
+        return jsonify({
+            'success': True, 
+            'message': '验证码已生成',
+            'code': code
+        }), 200
+            
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'发送验证码失败: {str(e)}'}), 500
+
+@app.route('/forgot-password', methods=['POST'])
+def forgot_password():
+    """忘记密码 - 通过邮箱重置密码"""
+    try:
+        data = request.get_json()
+        email = data.get('email')
+        code = data.get('code')
+        new_password = data.get('new_password')
+        
+        if not email:
+            return jsonify({'success': False, 'message': '请输入邮箱地址'}), 400
+        
+        if not code:
+            return jsonify({'success': False, 'message': '请输入验证码'}), 400
+        
+        if not new_password:
+            return jsonify({'success': False, 'message': '请输入新密码'}), 400
+        
+        if len(new_password) < 6:
+            return jsonify({'success': False, 'message': '密码至少6个字符'}), 400
+        
+        # 验证验证码
+        valid, msg = verify_code(email, code)
+        if not valid:
+            return jsonify({'success': False, 'message': msg}), 400
+        
+        # 重置密码
+        success, message = reset_password_by_email(email, new_password)
+        
+        if success:
+            return jsonify({'success': True, 'message': message}), 200
+        else:
+            return jsonify({'success': False, 'message': message}), 400
+            
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'重置密码失败: {str(e)}'}), 500
+
 @app.route('/logout', methods=['POST'])
 def logout():
     """用户登出"""
@@ -1625,6 +1743,34 @@ def clear_history():
         print(f'清除历史记录失败: {str(e)}')
         return jsonify({'success': False, 'message': f'清除失败: {str(e)}'}), 500
 
+@app.route('/api/user-info', methods=['GET'])
+def get_user_info():
+    """获取用户详细信息（包含注册时间和最后登录时间）"""
+    try:
+        if 'user_id' not in session:
+            return jsonify({'success': False, 'message': '用户未登录'}), 401
+        
+        user_id = session['user_id']
+        user = get_user_by_id(user_id)
+        
+        if user:
+            return jsonify({
+                'success': True,
+                'data': {
+                    'id': user[0],
+                    'username': user[1],
+                    'email': user[2],
+                    'created_at': user[3],
+                    'last_login': user[4]
+                }
+            })
+        else:
+            return jsonify({'success': False, 'message': '获取用户信息失败'}), 400
+            
+    except Exception as e:
+        print(f'获取用户信息失败: {str(e)}')
+        return jsonify({'success': False, 'message': f'获取失败: {str(e)}'}), 500
+
 # 收藏相关路由
 @app.route('/collection/add', methods=['POST'])
 def add_collection_route():
@@ -1749,11 +1895,47 @@ def api_learning_stats():
                 'learned_resources': stats['learned_count'],
                 'learning_hours': stats['total_hours'],
                 'collections': collection_count,
-                'completion_rate': stats['completion_rate']
+                'completion_rate': stats['completion_rate'],
+                'resource_details': stats['resource_details']
             }
         }), 200
     except Exception as e:
         return jsonify({'success': False, 'message': f'获取学习统计失败: {str(e)}'}), 500
+
+@app.route('/api/checkin', methods=['POST'])
+def api_checkin():
+    """用户签到"""
+    try:
+        if 'user_id' not in session:
+            return jsonify({'success': False, 'message': '未登录'}), 401
+        
+        user_id = session['user_id']
+        success, message, streak_days = checkin_user(user_id)
+        
+        return jsonify({
+            'success': success,
+            'message': message,
+            'streak_days': streak_days
+        }), 200
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'签到失败: {str(e)}'}), 500
+
+@app.route('/api/checkin/status', methods=['GET'])
+def api_checkin_status():
+    """获取签到状态"""
+    try:
+        if 'user_id' not in session:
+            return jsonify({'success': False, 'message': '未登录'}), 401
+        
+        user_id = session['user_id']
+        status = get_checkin_status(user_id)
+        
+        return jsonify({
+            'success': True,
+            'data': status
+        }), 200
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'获取签到状态失败: {str(e)}'}), 500
 
 @app.route('/api/start-learning', methods=['POST'])
 def api_start_learning():

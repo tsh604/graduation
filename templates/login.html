@@ -34,6 +34,9 @@
                     </div>
                     <button type="submit" class="login-btn">登录</button>
                 </form>
+                <div class="forgot-password-link">
+                    <a href="#" onclick="showForgotModal()">忘记密码？</a>
+                </div>
                 <div id="login-message" class="message"></div>
                 <div class="register-link">
                     还没有账号？ <a href="#" onclick="showRegisterModal()">立即注册</a>
@@ -69,6 +72,41 @@
                     </div>
                 </form>
                 <div id="register-message" class="message"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 忘记密码模态框 -->
+    <div id="forgot-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>忘记密码</h2>
+                <button class="close-btn" onclick="closeForgotModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="forgot-form">
+                    <div class="form-group">
+                        <label for="forgot-email">邮箱</label>
+                        <input type="email" id="forgot-email" placeholder="请输入注册时的邮箱" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="forgot-code">验证码</label>
+                        <div class="code-input-row">
+                            <input type="text" id="forgot-code" placeholder="请输入验证码" maxlength="6" required>
+                            <button type="button" id="send-code-btn" class="send-code-btn">获取验证码</button>
+                        </div>
+                        <div id="code-display" class="code-display"></div>
+                    </div>
+                    <div class="form-group">
+                        <label for="forgot-password">新密码</label>
+                        <input type="password" id="forgot-password" placeholder="请输入新密码" required>
+                    </div>
+                    <div class="form-actions">
+                        <button type="button" class="cancel-btn" onclick="closeForgotModal()">取消</button>
+                        <button type="submit" class="submit-btn">重置密码</button>
+                    </div>
+                </form>
+                <div id="forgot-message" class="message"></div>
             </div>
         </div>
     </div>
@@ -162,11 +200,123 @@
             });
         });
 
+        // 显示忘记密码模态框
+        function showForgotModal() {
+            document.getElementById('forgot-modal').style.display = 'block';
+        }
+
+        // 关闭忘记密码模态框
+        function closeForgotModal() {
+            document.getElementById('forgot-modal').style.display = 'none';
+            document.getElementById('forgot-message').textContent = '';
+        }
+
+        // 忘记密码表单提交
+        document.getElementById('forgot-form').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const email = document.getElementById('forgot-email').value;
+            const code = document.getElementById('forgot-code').value;
+            const newPassword = document.getElementById('forgot-password').value;
+            const messageDiv = document.getElementById('forgot-message');
+
+            messageDiv.textContent = '处理中...';
+            
+            fetch('/forgot-password', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ email, code, new_password: newPassword })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    messageDiv.textContent = data.message;
+                    messageDiv.style.color = 'green';
+                    setTimeout(() => {
+                        closeForgotModal();
+                        document.getElementById('login-message').textContent = '密码重置成功，请登录';
+                        document.getElementById('login-message').style.color = 'green';
+                    }, 1500);
+                } else {
+                    messageDiv.textContent = data.message;
+                    messageDiv.style.color = 'red';
+                }
+            })
+            .catch(error => {
+                messageDiv.textContent = '重置密码失败，请重试';
+                messageDiv.style.color = 'red';
+                console.error('Error:', error);
+            });
+        });
+
+        // 发送验证码按钮
+        document.getElementById('send-code-btn').addEventListener('click', function() {
+            const email = document.getElementById('forgot-email').value;
+            const messageDiv = document.getElementById('forgot-message');
+            const btn = this;
+            
+            if (!email) {
+                messageDiv.textContent = '请先输入邮箱地址';
+                messageDiv.style.color = 'red';
+                return;
+            }
+            
+            btn.disabled = true;
+            btn.textContent = '发送中...';
+            
+            fetch('/send-code', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ email })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    const codeDisplay = document.getElementById('code-display');
+                    codeDisplay.innerHTML = `您的验证码是：<strong>${data.code}</strong>`;
+                    codeDisplay.style.color = '#6366f1';
+                    codeDisplay.style.display = 'block';
+                    messageDiv.textContent = '验证码已生成';
+                    messageDiv.style.color = 'green';
+                    let countdown = 60;
+                    const timer = setInterval(() => {
+                        countdown--;
+                        if (countdown > 0) {
+                            btn.textContent = `${countdown}秒后重发`;
+                        } else {
+                            clearInterval(timer);
+                            btn.disabled = false;
+                            btn.textContent = '获取验证码';
+                        }
+                    }, 1000);
+                } else {
+                    messageDiv.textContent = data.message;
+                    messageDiv.style.color = 'red';
+                    btn.disabled = false;
+                    btn.textContent = '获取验证码';
+                }
+            })
+            .catch(error => {
+                messageDiv.textContent = '发送验证码失败，请重试';
+                messageDiv.style.color = 'red';
+                btn.disabled = false;
+                btn.textContent = '获取验证码';
+                console.error('Error:', error);
+            });
+        });
+
         // 点击模态框外部关闭
         window.onclick = function(event) {
             const registerModal = document.getElementById('register-modal');
+            const forgotModal = document.getElementById('forgot-modal');
             if (event.target == registerModal) {
                 closeRegisterModal();
+            } else if (event.target == forgotModal) {
+                closeForgotModal();
             }
         }
     </script>

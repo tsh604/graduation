@@ -1,6 +1,7 @@
 # database.py
 import sqlite3
 import os
+from datetime import datetime, timedelta
 
 def init_database():
     """初始化数据库，创建表并插入示例数据"""
@@ -100,10 +101,23 @@ def init_database():
             start_time DATETIME,
             end_time DATETIME,
             duration INTEGER DEFAULT 0,
-            progress REAL DEFAULT 0.0,
+            progress REAL DEFAULT 0,
             completed INTEGER DEFAULT 0,
             FOREIGN KEY (user_id) REFERENCES users(id),
             FOREIGN KEY (resource_id) REFERENCES resources(id)
+        )
+    ''')
+    
+    # 创建每日签到表
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS daily_checkin (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            checkin_date DATE NOT NULL,
+            streak_days INTEGER DEFAULT 1,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id),
+            UNIQUE(user_id, checkin_date)
         )
     ''')
     
@@ -473,6 +487,15 @@ def verify_user(email, password):
         )
         user = cursor.fetchone()
         if user:
+            # 更新最后登录时间（使用本地时间）
+            user_id = user[0]
+            from datetime import datetime
+            local_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            cursor.execute(
+                'UPDATE users SET last_login = ? WHERE id = ?',
+                (local_time, user_id)
+            )
+            conn.commit()
             return True, user
         else:
             return False, "邮箱或密码错误"
@@ -502,7 +525,7 @@ def get_user_by_id(user_id):
     cursor = conn.cursor()
     
     try:
-        cursor.execute('SELECT id, username, email FROM users WHERE id = ?', (user_id,))
+        cursor.execute('SELECT id, username, email, created_at, last_login FROM users WHERE id = ?', (user_id,))
         user = cursor.fetchone()
         return user
     except Exception as e:
@@ -568,6 +591,30 @@ def update_password(user_id, old_password, new_password):
         print(f"修改密码失败: {e}")
         conn.rollback()
         return False, f"修改密码失败: {e}"
+    finally:
+        conn.close()
+
+def reset_password_by_email(email, new_password):
+    """通过邮箱重置密码（忘记密码功能）"""
+    conn = sqlite3.connect('data/learning.db')
+    cursor = conn.cursor()
+    
+    try:
+        # 检查邮箱是否存在
+        cursor.execute('SELECT id FROM users WHERE email = ?', (email,))
+        result = cursor.fetchone()
+        
+        if not result:
+            return False, "该邮箱未注册"
+        
+        # 更新密码
+        cursor.execute('UPDATE users SET password = ? WHERE email = ?', (new_password, email))
+        conn.commit()
+        return True, "密码重置成功"
+    except Exception as e:
+        print(f"重置密码失败: {e}")
+        conn.rollback()
+        return False, f"重置密码失败: {e}"
     finally:
         conn.close()
 
@@ -658,11 +705,20 @@ def get_current_learning_state(user_id):
         result = cursor.fetchone()
         
         if result:
+            resource_id = result[0]
+            # 从learning_records获取当前进度
+            cursor.execute('''
+                SELECT progress FROM learning_records
+                WHERE user_id = ? AND resource_id = ? AND end_time IS NULL
+            ''', (user_id, resource_id))
+            progress_result = cursor.fetchone()
+            
             return {
-                'resource_id': result[0],
+                'resource_id': resource_id,
                 'status': result[1],
                 'duration': result[2] or 0,
-                'resource_name': result[3]
+                'resource_name': result[3],
+                'progress': progress_result[0] if progress_result else 0.0
             }
         return None
     except Exception as e:
@@ -725,24 +781,45 @@ def clear_learning_state(user_id):
         conn.close()
 
 def clear_user_history(user_id):
-    """清除用户历史记录"""
+    """清除用户历史记录，并重新排序后续记录的ID"""
     conn = sqlite3.connect('data/learning.db')
     cursor = conn.cursor()
     
     try:
-        # 删除用户的对话历史
+        # 步骤1：找到被删除用户的所有记录的ID
+        cursor.execute('SELECT id FROM dialogues WHERE user_id = ? ORDER BY id', (user_id,))
+        deleted_ids = [row[0] for row in cursor.fetchall()]
+        
+        if not deleted_ids:
+            conn.commit()
+            return True, "没有需要清除的记录"
+        
+        # 步骤2：删除该用户的记录
         cursor.execute('DELETE FROM dialogues WHERE user_id = ?', (user_id,))
         
-        # 检查是否所有记录都被删除了
-        cursor.execute('SELECT COUNT(*) FROM dialogues')
-        count = cursor.fetchone()[0]
+        # 步骤3：找出所有大于被删除记录中最小ID的记录
+        min_deleted_id = min(deleted_ids)
+        max_deleted_id = max(deleted_ids)
+        deleted_count = len(deleted_ids)
         
-        # 如果没有记录了，重置自增计数器
-        if count == 0:
-            cursor.execute('DELETE FROM sqlite_sequence WHERE name="dialogues"')
+        # 步骤4：将后续记录的ID往前移动
+        cursor.execute('''
+            UPDATE dialogues 
+            SET id = id - ? 
+            WHERE id > ?
+        ''', (deleted_count, max_deleted_id))
+        
+        # 步骤5：重新设置自增计数器，使新记录从当前最大ID+1开始
+        cursor.execute('SELECT MAX(id) FROM dialogues')
+        max_id = cursor.fetchone()[0]
+        
+        if max_id:
+            cursor.execute('UPDATE sqlite_sequence SET seq = ? WHERE name = "dialogues"', (max_id,))
+        else:
+            cursor.execute('DELETE FROM sqlite_sequence WHERE name = "dialogues"')
         
         conn.commit()
-        return True, "历史记录已清除"
+        return True, f"已清除{deleted_count}条记录，后续记录ID已重新排序"
     except Exception as e:
         print(f"清除历史记录失败: {e}")
         conn.rollback()
@@ -751,19 +828,27 @@ def clear_user_history(user_id):
         conn.close()
 
 def get_user_dialogues(user_id):
-    """获取用户的对话历史"""
+    """获取用户的对话历史（带行号，从1开始）"""
     conn = sqlite3.connect('data/learning.db')
     cursor = conn.cursor()
     
     try:
-        cursor.execute('SELECT user_message, bot_response FROM dialogues WHERE user_id = ? ORDER BY timestamp', (user_id,))
+        # 使用ROW_NUMBER()为每个用户的对话添加行号（从1开始）
+        cursor.execute('''
+            SELECT user_message, bot_response, 
+                   ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY timestamp) as row_num
+            FROM dialogues 
+            WHERE user_id = ? 
+            ORDER BY timestamp
+        ''', (user_id,))
         results = cursor.fetchall()
         
         dialogues = []
         for row in results:
             dialogues.append({
                 'user_message': row[0],
-                'bot_response': row[1]
+                'bot_response': row[1],
+                'row_num': row[2]  # 添加行号，每个用户从1开始
             })
         
         return dialogues
@@ -855,42 +940,52 @@ def get_user_collections(user_id):
         return []
 
 def create_learning_record(user_id, resource_id):
-    """创建或复用学习记录（学习同一资源时复用已有记录）"""
+    """创建学习记录（如果已有未完成记录则复用，已有完成记录则重新激活并保留进度）"""
     conn = sqlite3.connect('data/learning.db')
     cursor = conn.cursor()
     
     try:
-        # 先检查是否已有该资源的记录（无论是否完成）
+        # 先检查是否已有该资源的未完成记录
         cursor.execute('''
-            SELECT id, end_time FROM learning_records 
-            WHERE user_id = ? AND resource_id = ?
+            SELECT id FROM learning_records 
+            WHERE user_id = ? AND resource_id = ? AND end_time IS NULL
+            LIMIT 1
+        ''', (user_id, resource_id))
+        existing_uncompleted = cursor.fetchone()
+        
+        if existing_uncompleted:
+            # 已有未完成的记录，复用它（继续学习）
+            return True, "已有学习记录"
+        
+        # 检查是否已有该资源的已完成记录
+        cursor.execute('''
+            SELECT id, progress FROM learning_records 
+            WHERE user_id = ? AND resource_id = ? AND end_time IS NOT NULL
             ORDER BY start_time DESC
             LIMIT 1
         ''', (user_id, resource_id))
-        existing = cursor.fetchone()
+        existing_completed = cursor.fetchone()
         
-        if existing:
-            # 已有记录，检查是否已完成
-            record_id, end_time = existing
-            
-            if end_time is not None:
-                # 记录已完成，重新激活它（清除结束时间，更新开始时间）
-                cursor.execute('''
-                    UPDATE learning_records 
-                    SET start_time = CURRENT_TIMESTAMP, end_time = NULL, duration = 0, progress = 0, completed = 0
-                    WHERE id = ?
-                ''', (record_id,))
-                conn.commit()
-                return True, "学习记录已重新激活"
-            else:
-                # 已有未完成的记录，直接返回成功
-                return True, "已有学习记录"
+        # 获取当前本地时间
+        from datetime import datetime
+        local_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        
+        if existing_completed:
+            # 已有已完成的记录，重新激活它（保留进度）
+            record_id, saved_progress = existing_completed
+            cursor.execute('''
+                UPDATE learning_records 
+                SET start_time = ?, end_time = NULL, duration = 0, completed = 0
+                WHERE id = ?
+            ''', (local_time, record_id))
+            conn.commit()
+            return True, "学习记录已重新激活"
         
         # 创建新记录
         cursor.execute('''
-            INSERT INTO learning_records (user_id, resource_id, start_time)
-            VALUES (?, ?, CURRENT_TIMESTAMP)
-        ''', (user_id, resource_id))
+            INSERT INTO learning_records (user_id, resource_id, start_time, progress)
+            VALUES (?, ?, ?, 0)
+        ''', (user_id, resource_id, local_time))
         conn.commit()
         return True, "学习记录已创建"
     except Exception as e:
@@ -942,6 +1037,10 @@ def complete_learning_record(user_id, resource_id, duration, completed=0, progre
     cursor = conn.cursor()
     
     try:
+        # 获取当前本地时间
+        from datetime import datetime
+        local_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        
         # 获取资源的总学习时长（小时）
         cursor.execute('''
             SELECT learning_time FROM resources WHERE id = ?
@@ -960,9 +1059,9 @@ def complete_learning_record(user_id, resource_id, duration, completed=0, progre
         
         cursor.execute('''
             UPDATE learning_records 
-            SET end_time = CURRENT_TIMESTAMP, duration = ?, progress = ?, completed = ?
+            SET end_time = ?, duration = ?, progress = ?, completed = ?
             WHERE user_id = ? AND resource_id = ? AND end_time IS NULL
-        ''', (duration, calculated_progress, completed, user_id, resource_id))
+        ''', (local_time, duration, calculated_progress, completed, user_id, resource_id))
         conn.commit()
         return True, "学习记录已完成"
     except Exception as e:
@@ -993,11 +1092,28 @@ def get_learning_stats(user_id):
         # 完成率
         completion_rate = round((completed_count / learned_count) * 100) if learned_count > 0 else 0
         
+        # 获取每个资源的详细进度
+        cursor.execute('''
+            SELECT r.title, lr.progress 
+            FROM learning_records lr
+            JOIN resources r ON lr.resource_id = r.id
+            WHERE lr.user_id = ?
+            GROUP BY lr.resource_id
+            ORDER BY lr.start_time DESC
+        ''', (user_id,))
+        resource_details = []
+        for row in cursor.fetchall():
+            resource_details.append({
+                'title': row[0],
+                'progress': round(row[1], 2) if row[1] else 0.0
+            })
+        
         return {
             'learned_count': learned_count,
             'total_hours': round(total_minutes / 60, 1),
             'completed_count': completed_count,
-            'completion_rate': completion_rate
+            'completion_rate': completion_rate,
+            'resource_details': resource_details
         }
     except Exception as e:
         print(f"获取学习统计失败: {e}")
@@ -1005,7 +1121,112 @@ def get_learning_stats(user_id):
             'learned_count': 0,
             'total_hours': 0,
             'completed_count': 0,
-            'completion_rate': 0
+            'completion_rate': 0,
+            'resource_details': []
+        }
+    finally:
+        conn.close()
+
+def checkin_user(user_id):
+    """用户每日签到"""
+    conn = sqlite3.connect('data/learning.db')
+    cursor = conn.cursor()
+    
+    try:
+        today = datetime.now().strftime('%Y-%m-%d')
+        
+        # 检查今天是否已签到
+        cursor.execute('''
+            SELECT id, streak_days FROM daily_checkin 
+            WHERE user_id = ? AND checkin_date = ?
+        ''', (user_id, today))
+        existing = cursor.fetchone()
+        
+        if existing:
+            return False, "今日已签到", 0
+        
+        # 获取昨天的连续天数
+        yesterday = (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d')
+        cursor.execute('''
+            SELECT streak_days FROM daily_checkin 
+            WHERE user_id = ? AND checkin_date = ?
+        ''', (user_id, yesterday))
+        yesterday_record = cursor.fetchone()
+        
+        if yesterday_record:
+            streak_days = yesterday_record[0] + 1
+        else:
+            streak_days = 1
+        
+        # 插入签到记录
+        cursor.execute('''
+            INSERT INTO daily_checkin (user_id, checkin_date, streak_days)
+            VALUES (?, ?, ?)
+        ''', (user_id, today, streak_days))
+        conn.commit()
+        
+        return True, "签到成功", streak_days
+    except Exception as e:
+        print(f"签到失败: {e}")
+        conn.rollback()
+        return False, f"签到失败: {e}", 0
+    finally:
+        conn.close()
+
+def get_checkin_status(user_id):
+    """获取用户签到状态"""
+    conn = sqlite3.connect('data/learning.db')
+    cursor = conn.cursor()
+    
+    try:
+        today = datetime.now().strftime('%Y-%m-%d')
+        
+        # 检查今天是否已签到
+        cursor.execute('''
+            SELECT streak_days FROM daily_checkin 
+            WHERE user_id = ? AND checkin_date = ?
+        ''', (user_id, today))
+        today_record = cursor.fetchone()
+        
+        checked_in = today_record is not None
+        current_streak = today_record[0] if today_record else 0
+        
+        # 获取本周签到情况
+        week_start = (datetime.now() - timedelta(days=datetime.now().weekday())).strftime('%Y-%m-%d')
+        cursor.execute('''
+            SELECT checkin_date FROM daily_checkin 
+            WHERE user_id = ? AND checkin_date >= ?
+            ORDER BY checkin_date
+        ''', (user_id, week_start))
+        week_checkins = [row[0] for row in cursor.fetchall()]
+        
+        # 获取最高连续天数
+        cursor.execute('''
+            SELECT MAX(streak_days) FROM daily_checkin WHERE user_id = ?
+        ''', (user_id,))
+        max_streak = cursor.fetchone()[0] or 0
+        
+        # 获取总签到天数
+        cursor.execute('''
+            SELECT COUNT(*) FROM daily_checkin WHERE user_id = ?
+        ''', (user_id,))
+        total_days = cursor.fetchone()[0] or 0
+        
+        return {
+            'checked_in': checked_in,
+            'current_streak': current_streak,
+            'week_checkins': week_checkins,
+            'max_streak': max_streak,
+            'total_days': total_days
+        }
+    except Exception as e:
+        print(f"获取签到状态失败: {e}")
+        return {
+            'checked_in': False,
+            'current_streak': 0,
+            'week_checkins': [],
+            'max_streak': 0,
+            'total_days': 0
         }
     finally:
         conn.close()

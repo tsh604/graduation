@@ -31,6 +31,9 @@
                         <button class="nav-button active" onclick="showSection('account')">账户信息</button>
                     </div>
                     <div class="nav-item">
+                        <button class="nav-button" onclick="showSection('checkin')">每日打卡</button>
+                    </div>
+                    <div class="nav-item">
                         <button class="nav-button" onclick="showSection('collections')">我的收藏</button>
                     </div>
                     <div class="nav-item">
@@ -70,11 +73,11 @@
                         </div>
                         <div class="info-row">
                             <span class="info-label">注册时间</span>
-                            <span class="info-value">2026-04-27</span>
+                            <span class="info-value" id="created-at">加载中...</span>
                         </div>
                         <div class="info-row">
                             <span class="info-label">最后登录</span>
-                            <span class="info-value">2026-04-27 08:00</span>
+                            <span class="info-value" id="last-login">加载中...</span>
                         </div>
                     </div>
                 </div>
@@ -87,13 +90,60 @@
                     </div>
                 </div>
 
+                <!-- 每日打卡 -->
+                <div id="checkin" class="content-section">
+                    <h2 class="section-title">每日打卡</h2>
+                    <div class="checkin-container">
+                        <div class="checkin-main">
+                            <div class="checkin-btn-wrapper">
+                                <button class="checkin-btn" id="checkin-btn" onclick="doCheckin()">
+                                    <span class="checkin-icon">✓</span>
+                                    <span class="checkin-text">立即打卡</span>
+                                </button>
+                                <div class="checkin-streak" id="checkin-streak">
+                                    <span class="streak-fire">🔥</span>
+                                    <span class="streak-count" id="streak-count">0</span>
+                                    <span class="streak-unit">天连续</span>
+                                </div>
+                            </div>
+                            <p class="checkin-tip" id="checkin-tip">每天学习后记得打卡哦～</p>
+                        </div>
+                        <div class="checkin-week">
+                            <h3 class="week-title">本周打卡</h3>
+                            <div class="week-days" id="week-days">
+                                <div class="week-day" data-day="0"><span>一</span></div>
+                                <div class="week-day" data-day="1"><span>二</span></div>
+                                <div class="week-day" data-day="2"><span>三</span></div>
+                                <div class="week-day" data-day="3"><span>四</span></div>
+                                <div class="week-day" data-day="4"><span>五</span></div>
+                                <div class="week-day" data-day="5"><span>六</span></div>
+                                <div class="week-day" data-day="6"><span>日</span></div>
+                            </div>
+                        </div>
+                        <div class="checkin-stats">
+                            <div class="checkin-stat-item">
+                                <span class="stat-num" id="total-checkin">0</span>
+                                <span class="stat-desc">总打卡天数</span>
+                            </div>
+                            <div class="checkin-stat-item">
+                                <span class="stat-num" id="max-streak">0</span>
+                                <span class="stat-desc">最高连续</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- 学习统计 -->
                 <div id="learning" class="content-section">
                     <h2 class="section-title">学习统计</h2>
                     <div class="stats-grid">
-                        <div class="stat-card">
+                        <div class="stat-card hover-card" id="stat-learned-card">
                             <h3 class="stat-value" id="stat-learned">0</h3>
                             <p class="stat-label">已学习资源</p>
+                            <div class="tooltip" id="learned-tooltip">
+                                <div class="tooltip-header">学习进度详情</div>
+                                <div class="tooltip-content" id="learned-tooltip-content"></div>
+                            </div>
                         </div>
                         <div class="stat-card">
                             <h3 class="stat-value" id="stat-hours">0</h3>
@@ -267,10 +317,117 @@
                 loadCollections();
             }
             
+            // 如果是打卡区域，加载打卡状态
+            if (sectionId === 'checkin') {
+                loadCheckinStatus();
+            }
+            
             // 如果是学习统计区域，加载学习统计数据
             if (sectionId === 'learning') {
                 loadLearningStats();
             }
+        }
+        
+        // 加载打卡状态
+        async function loadCheckinStatus() {
+            try {
+                const response = await fetch('/api/checkin/status');
+                const data = await response.json();
+                
+                if (data.success) {
+                    const status = data.data;
+                    
+                    // 更新打卡按钮状态
+                    const checkinBtn = document.getElementById('checkin-btn');
+                    if (status.checked_in) {
+                        checkinBtn.classList.add('checked-in');
+                        checkinBtn.querySelector('.checkin-text').textContent = '已打卡';
+                        checkinBtn.disabled = true;
+                    } else {
+                        checkinBtn.classList.remove('checked-in');
+                        checkinBtn.querySelector('.checkin-text').textContent = '立即打卡';
+                        checkinBtn.disabled = false;
+                    }
+                    
+                    // 更新连续天数
+                    document.getElementById('streak-count').textContent = status.current_streak;
+                    
+                    // 更新本周打卡日历
+                    const weekDays = document.querySelectorAll('.week-day');
+                    const today = new Date();
+                    const dayOfWeek = today.getDay();
+                    // 计算到本周一的天数（周日需要特殊处理）
+                    const daysToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+                    const monday = new Date(today);
+                    monday.setDate(monday.getDate() - daysToMonday);
+                    
+                    weekDays.forEach((day, index) => {
+                        day.classList.remove('checked', 'today');
+                        const date = new Date(monday);
+                        date.setDate(date.getDate() + index);
+                        const dateStr = date.toISOString().split('T')[0];
+                        
+                        if (status.week_checkins.includes(dateStr)) {
+                            day.classList.add('checked');
+                        }
+                        // 检查是否是今天
+                        if (date.toDateString() === today.toDateString()) {
+                            day.classList.add('today');
+                        }
+                    });
+                    
+                    // 更新统计数据
+                    document.getElementById('total-checkin').textContent = status.total_days;
+                    document.getElementById('max-streak').textContent = status.max_streak;
+                    
+                    // 更新提示文字
+                    const tip = document.getElementById('checkin-tip');
+                    if (status.checked_in) {
+                        tip.textContent = `已连续打卡 ${status.current_streak} 天，继续保持！`;
+                    } else {
+                        tip.textContent = '每天学习后记得打卡哦～';
+                    }
+                }
+            } catch (error) {
+                console.error('加载打卡状态失败:', error);
+            }
+        }
+        
+        // 执行打卡
+        async function doCheckin() {
+            try {
+                const response = await fetch('/api/checkin', {
+                    method: 'POST'
+                });
+                const data = await response.json();
+                
+                if (data.success) {
+                    showToast(`打卡成功！已连续 ${data.streak_days} 天`);
+                    loadCheckinStatus();
+                } else {
+                    showToast(data.message);
+                }
+            } catch (error) {
+                console.error('打卡失败:', error);
+                showToast('打卡失败，请重试');
+            }
+        }
+        
+        // 显示提示消息
+        function showToast(message) {
+            const toast = document.createElement('div');
+            toast.className = 'toast-message';
+            toast.textContent = message;
+            document.body.appendChild(toast);
+            
+            setTimeout(() => {
+                toast.classList.add('show');
+            }, 10);
+            
+            setTimeout(() => {
+                toast.classList.remove('show');
+                setTimeout(() => toast.remove(), 300);
+            }, 2000);
         }
         
         // 加载学习统计数据
@@ -284,10 +441,35 @@
                     document.getElementById('stat-hours').textContent = data.data.learning_hours + 'h';
                     document.getElementById('stat-collections').textContent = data.data.collections;
                     document.getElementById('stat-completion').textContent = data.data.completion_rate + '%';
+                    
+                    // 更新悬停提示框中的资源详情
+                    updateLearnedTooltip(data.data.resource_details);
                 }
             } catch (error) {
                 console.error('加载学习统计失败:', error);
             }
+        }
+        
+        // 更新已学习资源的悬停提示框
+        function updateLearnedTooltip(resourceDetails) {
+            const tooltipContent = document.getElementById('learned-tooltip-content');
+            
+            if (!resourceDetails || resourceDetails.length === 0) {
+                tooltipContent.innerHTML = '<div class="tooltip-empty">暂无学习记录</div>';
+                return;
+            }
+            
+            let html = '';
+            resourceDetails.forEach(resource => {
+                html += `
+                    <div class="tooltip-item">
+                        <span class="tooltip-item-title">${resource.title}</span>
+                        <span class="tooltip-item-progress">${resource.progress}%</span>
+                    </div>
+                `;
+            });
+            
+            tooltipContent.innerHTML = html;
         }
         
         // 加载收藏列表
@@ -625,6 +807,49 @@
                 messageDiv.style.color = 'red';
             }
         }
+        
+        // 加载用户信息（注册时间和最后登录时间）
+        async function loadUserInfo() {
+            try {
+                const response = await fetch('/api/user-info');
+                const data = await response.json();
+                
+                if (data.success) {
+                    const user = data.data;
+                    
+                    // 格式化并显示注册时间
+                    if (user.created_at) {
+                        const createdDate = new Date(user.created_at);
+                        const year = createdDate.getFullYear();
+                        const month = String(createdDate.getMonth() + 1).padStart(2, '0');
+                        const day = String(createdDate.getDate()).padStart(2, '0');
+                        document.getElementById('created-at').textContent = `${year}-${month}-${day}`;
+                    } else {
+                        document.getElementById('created-at').textContent = '未知';
+                    }
+                    
+                    // 格式化并显示最后登录时间
+                    if (user.last_login) {
+                        const lastLoginDate = new Date(user.last_login);
+                        const year = lastLoginDate.getFullYear();
+                        const month = String(lastLoginDate.getMonth() + 1).padStart(2, '0');
+                        const day = String(lastLoginDate.getDate()).padStart(2, '0');
+                        const hour = String(lastLoginDate.getHours()).padStart(2, '0');
+                        const minute = String(lastLoginDate.getMinutes()).padStart(2, '0');
+                        document.getElementById('last-login').textContent = `${year}-${month}-${day} ${hour}:${minute}`;
+                    } else {
+                        document.getElementById('last-login').textContent = '首次登录';
+                    }
+                }
+            } catch (error) {
+                console.error('加载用户信息失败:', error);
+            }
+        }
+        
+        // 页面加载时自动加载用户信息
+        document.addEventListener('DOMContentLoaded', function() {
+            loadUserInfo();
+        });
     </script>
 </body>
 </html>
