@@ -6,7 +6,7 @@
 
 body {
     font-family: 'Inter', 'Microsoft YaHei', -apple-system, BlinkMacSystemFont, sans-serif;
-    background: linear-gradient(145deg, #f0f4fa 0%, #e9eef5 100%);
+    background: linear-gradient(145deg, #e0f2fe 0%, #f0f9ff 100%);
     min-height: 100vh;
     display: flex;
     justify-content: center;
@@ -14,7 +14,7 @@ body {
     padding: 20px;
 }
 
-/* 主容器 - 毛玻璃效果 */
+/* 主容�?- 毛玻璃效�?*/
 .glass-container {
     width: 100%;
     max-width: 1100px;
@@ -33,7 +33,7 @@ body {
     position: relative;
 }
 
-/* 装饰性光效 */
+/* 装饰性光�?*/
 .glass-container::before {
     content: '';
     position: absolute;
@@ -87,9 +87,9 @@ body {
 
 .user-info:hover {
     background: rgba(255, 255, 255, 1);
-    border-color: #6366f1;
+    border-color: #0ea5e9;
     transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.2);
+    box-shadow: 0 4px 12px rgba(14, 165, 233, 0.2);
 }
 
 .user-arrow {
@@ -101,13 +101,13 @@ body {
     transform: rotate(180deg);
 }
 
-/* 登录和注册按钮 */
+/* 登录和注册按�?*/
 .auth-btn {
     padding: 10px 20px;
-    border: 1px solid rgba(99, 102, 241, 0.3);
+    border: 1px solid rgba(14, 165, 233, 0.3);
     border-radius: 12px;
     background: rgba(255, 255, 255, 0.8);
-    color: #6366f1;
+    color: #0ea5e9;
     font-size: 14px;
     font-weight: 500;
     cursor: pointer;
@@ -118,10 +118,10 @@ body {
 }
 
 .auth-btn:hover {
-    background: rgba(99, 102, 241, 0.05);
-    border-color: #6366f1;
+    background: rgba(14, 165, 233, 0.05);
+    border-color: #0ea5e9;
     transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.2);
+    box-shadow: 0 4px 12px rgba(14, 165, 233, 0.2);
 }
 
 /* 模态框样式 */
@@ -220,8 +220,8 @@ body {
 
 .form-group input:focus {
     outline: none;
-    border-color: #6366f1;
-    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+    border-color: #0ea5e9;
+    box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.1);
     background: white;
 }
 
@@ -254,7 +254,7 @@ body {
     padding: 12px;
     border: none;
     border-radius: 12px;
-    background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+    background: linear-gradient(135deg, #0ea5e9 0%, #38bdf8 100%);
     color: white;
     font-size: 14px;
     font-weight: 500;
@@ -264,7 +264,7 @@ body {
 
 .submit-btn:hover {
     transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.4);
+    box-shadow: 0 4px 12px rgba(14, 165, 233, 0.4);
 }
 
 /* 消息提示样式 */
@@ -286,14 +286,14 @@ body {
 .logo {
     width: 48px;
     height: 48px;
-    background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+    background: linear-gradient(135deg, #0ea5e9 0%, #38bdf8 100%);
     border-radius: 18px;
     display: flex;
     align-items: center;
     justify-content: center;
     color: white;
     font-size: 24px;
-    box-shadow: 0 12px 24px -8px rgba(99, 102, 241, 0.4);
+    box-shadow: 0 12px 24px -8px rgba(14, 165, 233, 0.4);
 }
 
 .title-section h1 {
@@ -313,10 +313,10 @@ body {
 }
 
 .badge span {
-    background: rgba(99, 102, 241, 0.1);
+    background: rgba(14, 165, 233, 0.1);
     padding: 4px 10px;
     border-radius: 30px;
-    color: #4f46e5;
+    color: #0ea5e9;
     font-weight: 500;
     font-size: 12px;
 }
@@ -412,7 +412,7 @@ body {
 }
 
 .bot-message .message-avatar {
-    background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+    background: linear-gradient(135deg, #0ea5e9 0%, #38bdf8 100%);
     color: white;
 }
 
@@ -446,10 +446,10 @@ body {
 }
 
 .user-message .message-content {
-    background: #6366f1;
+    background: #0ea5e9;
     color: white;
     border-bottom-right-radius: 6px;
-    box-shadow: 0 8px 16px -4px rgba(99, 102, 241, 0.3);
+    box-shadow: 0 8px 16px -4px rgba(14, 165, 233, 0.3);
 }
 
 .bot-message .message-content {
@@ -487,7 +487,7 @@ body {
     left: 0;
     width: 4px;
     height: 100%;
-    background: linear-gradient(180deg, #6366f1 0%, #8b5cf6 100%);
+    background: linear-gradient(180deg, #0ea5e9 0%, #38bdf8 100%);
     border-radius: 4px 0 0 4px;
 }
 
@@ -507,7 +507,7 @@ body {
 .resource-index {
     width: 32px;
     height: 32px;
-    background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+    background: linear-gradient(135deg, #0ea5e9 0%, #38bdf8 100%);
     border-radius: 12px;
     display: flex;
     align-items: center;
@@ -517,7 +517,7 @@ body {
     color: white;
     margin-right: 8px;
     flex-shrink: 0;
-    box-shadow: 0 4px 8px rgba(99, 102, 241, 0.3);
+    box-shadow: 0 4px 8px rgba(14, 165, 233, 0.3);
 }
 
 .resource-tag {
@@ -554,12 +554,12 @@ body {
 }
 
 .resource-url:hover {
-    color: #4f46e5;
+    color: #0ea5e9;
     text-decoration: underline;
 }
 
 .resource-link {
-    color: #4f46e5;
+    color: #0ea5e9;
     text-decoration: none;
     font-size: 14px;
     font-weight: 500;
@@ -569,7 +569,7 @@ body {
 }
 
 .resource-link:hover {
-    color: #4338ca;
+    color: #0284c7;
     transform: translateX(4px);
 }
 
@@ -611,7 +611,7 @@ body {
     color: rgba(255, 255, 255, 0.7);
 }
 
-/* 新增：链接样式 */
+/* 新增：链接样�?*/
 .message-content a {
     color: #60a5fa;
     text-decoration: underline;
@@ -667,8 +667,8 @@ body {
 }
 
 .input-wrapper input:focus {
-    border-color: #6366f1;
-    box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.15);
+    border-color: #0ea5e9;
+    box-shadow: 0 0 0 4px rgba(14, 165, 233, 0.15);
 }
 
 .input-wrapper input::placeholder {
@@ -679,7 +679,7 @@ body {
     width: 56px;
     height: 56px;
     border-radius: 40px;
-    background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+    background: linear-gradient(135deg, #0ea5e9 0%, #38bdf8 100%);
     color: white;
     border: none;
     cursor: pointer;
@@ -687,13 +687,13 @@ body {
     align-items: center;
     justify-content: center;
     transition: all 0.2s;
-    box-shadow: 0 8px 16px -4px rgba(99, 102, 241, 0.4);
+    box-shadow: 0 8px 16px -4px rgba(14, 165, 233, 0.4);
     flex-shrink: 0;
 }
 
 .send-btn:hover {
     transform: scale(1.05);
-    box-shadow: 0 12px 24px -4px rgba(99, 102, 241, 0.5);
+    box-shadow: 0 12px 24px -4px rgba(14, 165, 233, 0.5);
 }
 
 .send-btn:active {
@@ -738,10 +738,10 @@ body {
     }
 }
 
-/* 浏览资源库按钮 */
+/* 浏览资源库按�?*/
 .library-button {
     padding: 10px 20px;
-    background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+    background: linear-gradient(135deg, #0ea5e9 0%, #38bdf8 100%);
     color: white;
     border: none;
     border-radius: 30px;
@@ -749,15 +749,15 @@ body {
     font-weight: 500;
     cursor: pointer;
     transition: all 0.2s ease;
-    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+    box-shadow: 0 4px 12px rgba(14, 165, 233, 0.3);
     margin-left: 16px;
     flex-shrink: 0;
 }
 
 .library-button:hover {
     transform: translateY(-2px);
-    box-shadow: 0 6px 16px rgba(99, 102, 241, 0.4);
-    background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+    box-shadow: 0 6px 16px rgba(14, 165, 233, 0.4);
+    background: linear-gradient(135deg, #0ea5e9 0%, #38bdf8 100%);
 }
 
 /* 模态框样式 */
@@ -875,7 +875,7 @@ body {
     transform: translateX(4px);
 }
 
-/* 响应式 */
+/* 响应式设�?*/
 @media (max-width: 640px) {
     .glass-container {
         height: 95vh;
@@ -941,7 +941,7 @@ body {
 .collection-index {
     width: 32px;
     height: 32px;
-    background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+    background: linear-gradient(135deg, #0ea5e9 0%, #38bdf8 100%);
     border-radius: 12px;
     display: flex;
     align-items: center;
@@ -950,7 +950,7 @@ body {
     font-weight: 600;
     color: white;
     flex-shrink: 0;
-    box-shadow: 0 4px 8px rgba(99, 102, 241, 0.3);
+    box-shadow: 0 4px 8px rgba(14, 165, 233, 0.3);
 }
 
 .collection-tag {
@@ -1140,7 +1140,7 @@ body {
 }
 
 .learn-btn {
-    background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+    background: linear-gradient(135deg, #0ea5e9 0%, #38bdf8 100%);
     color: white;
     border: none;
     padding: 8px 16px;
@@ -1153,13 +1153,13 @@ body {
     align-items: center;
     gap: 6px;
     margin-left: 8px;
-    box-shadow: 0 4px 8px rgba(99, 102, 241, 0.3);
+    box-shadow: 0 4px 8px rgba(14, 165, 233, 0.3);
 }
 
 .learn-btn:hover {
-    background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+    background: linear-gradient(135deg, #0ea5e9 0%, #38bdf8 100%);
     transform: translateY(-1px);
-    box-shadow: 0 6px 16px rgba(99, 102, 241, 0.4);
+    box-shadow: 0 6px 16px rgba(14, 165, 233, 0.4);
 }
 
 .learn-btn.learning {

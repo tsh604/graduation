@@ -971,11 +971,11 @@ def create_learning_record(user_id, resource_id):
         local_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         
         if existing_completed:
-            # 已有已完成的记录，重新激活它（保留进度）
+            # 已有已完成的记录，重新激活它（保留进度和累计时长）
             record_id, saved_progress = existing_completed
             cursor.execute('''
                 UPDATE learning_records 
-                SET start_time = ?, end_time = NULL, duration = 0, completed = 0
+                SET start_time = ?, end_time = NULL, completed = 0
                 WHERE id = ?
             ''', (local_time, record_id))
             conn.commit()
@@ -1001,6 +1001,17 @@ def update_learning_record(user_id, resource_id, duration, completed=0, progress
     cursor = conn.cursor()
     
     try:
+        # 先获取当前累计时长
+        cursor.execute('''
+            SELECT duration FROM learning_records 
+            WHERE user_id = ? AND resource_id = ? AND end_time IS NULL
+        ''', (user_id, resource_id))
+        current_duration = cursor.fetchone()
+        current_duration = current_duration[0] if current_duration else 0
+        
+        # 计算更新后的累计时长（分钟）
+        new_total_duration = current_duration + duration
+        
         # 获取资源的总学习时长（小时）
         cursor.execute('''
             SELECT learning_time FROM resources WHERE id = ?
@@ -1008,12 +1019,12 @@ def update_learning_record(user_id, resource_id, duration, completed=0, progress
         resource = cursor.fetchone()
         total_time_hours = resource[0] if resource and resource[0] else 60  # 默认60小时
         
-        # 将学习时长（分钟）转换为小时
-        duration_hours = duration / 60
+        # 将累计学习时长（分钟）转换为小时
+        total_duration_hours = new_total_duration / 60
         
-        # 计算进度：(实际学习时长(小时) / 资源总时长(小时)) * 100，保留两位小数
+        # 计算进度：(累计学习时长(小时) / 资源总时长(小时)) * 100，保留两位小数
         if total_time_hours > 0:
-            calculated_progress = round(min(100, (duration_hours / total_time_hours) * 100), 2)
+            calculated_progress = round(min(100, (total_duration_hours / total_time_hours) * 100), 2)
         else:
             calculated_progress = 0.0
         
@@ -1021,7 +1032,7 @@ def update_learning_record(user_id, resource_id, duration, completed=0, progress
             UPDATE learning_records 
             SET duration = ?, progress = ?
             WHERE user_id = ? AND resource_id = ? AND end_time IS NULL
-        ''', (duration, calculated_progress, user_id, resource_id))
+        ''', (new_total_duration, calculated_progress, user_id, resource_id))
         conn.commit()
         return True, "学习记录已更新"
     except Exception as e:
@@ -1041,6 +1052,17 @@ def complete_learning_record(user_id, resource_id, duration, completed=0, progre
         from datetime import datetime
         local_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         
+        # 先获取当前累计时长
+        cursor.execute('''
+            SELECT duration FROM learning_records 
+            WHERE user_id = ? AND resource_id = ? AND end_time IS NULL
+        ''', (user_id, resource_id))
+        current_duration = cursor.fetchone()
+        current_duration = current_duration[0] if current_duration else 0
+        
+        # 计算更新后的累计时长（分钟）
+        new_total_duration = current_duration + duration
+        
         # 获取资源的总学习时长（小时）
         cursor.execute('''
             SELECT learning_time FROM resources WHERE id = ?
@@ -1048,12 +1070,12 @@ def complete_learning_record(user_id, resource_id, duration, completed=0, progre
         resource = cursor.fetchone()
         total_time_hours = resource[0] if resource and resource[0] else 60  # 默认60小时
         
-        # 将学习时长（分钟）转换为小时
-        duration_hours = duration / 60
+        # 将累计学习时长（分钟）转换为小时
+        total_duration_hours = new_total_duration / 60
         
-        # 计算进度：(实际学习时长(小时) / 资源总时长(小时)) * 100，保留两位小数
+        # 计算进度：(累计学习时长(小时) / 资源总时长(小时)) * 100，保留两位小数
         if total_time_hours > 0:
-            calculated_progress = round(min(100, (duration_hours / total_time_hours) * 100), 2)
+            calculated_progress = round(min(100, (total_duration_hours / total_time_hours) * 100), 2)
         else:
             calculated_progress = 0.0
         
@@ -1061,7 +1083,7 @@ def complete_learning_record(user_id, resource_id, duration, completed=0, progre
             UPDATE learning_records 
             SET end_time = ?, duration = ?, progress = ?, completed = ?
             WHERE user_id = ? AND resource_id = ? AND end_time IS NULL
-        ''', (local_time, duration, calculated_progress, completed, user_id, resource_id))
+        ''', (local_time, new_total_duration, calculated_progress, completed, user_id, resource_id))
         conn.commit()
         return True, "学习记录已完成"
     except Exception as e:

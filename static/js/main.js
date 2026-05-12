@@ -1097,7 +1097,8 @@ async function addCollection(resourceId) {
 
 // 学习计时器
 let learningTimer = null;
-let learningDuration = 0;
+let learningDuration = 0;        // 当前累计学习时长
+let sessionStartDuration = 0;    // 本次学习开始时的累计时长（用于计算本次增量）
 let currentResourceId = null;
 let currentResourceTitle = null;
 let currentLearnBtn = null;
@@ -1123,6 +1124,8 @@ async function loadLearningState() {
                 currentResourceId = state.resource_id;
                 currentResourceTitle = state.resource_name || '未知资源';
                 learningDuration = state.duration || 0;
+                // 设置本次学习的起始时长，用于计算增量
+                sessionStartDuration = learningDuration;
                 
                 // 重新开始计时
                 learningTimer = setInterval(() => {
@@ -1132,14 +1135,16 @@ async function loadLearningState() {
                 window.addEventListener('beforeunload', handleBeforeUnload);
                 
                 // 更新对应按钮的状态
-                updateLearnButtonState(state.resource_id, 'learning');
+                updateLearnButtonState(state.resource_id, 'learning', currentResourceTitle);
             } else if (state.resource_id && state.status === 'paused') {
                 currentResourceId = state.resource_id;
                 currentResourceTitle = state.resource_name || '未知资源';
                 learningDuration = state.duration || 0;
+                // 设置本次学习的起始时长，用于计算增量
+                sessionStartDuration = learningDuration;
                 
                 // 更新对应按钮的状态为暂停
-                updateLearnButtonState(state.resource_id, 'paused');
+                updateLearnButtonState(state.resource_id, 'paused', currentResourceTitle);
             }
         }
     } catch (error) {
@@ -1148,7 +1153,7 @@ async function loadLearningState() {
 }
 
 // 更新学习按钮状态
-function updateLearnButtonState(resourceId, status) {
+function updateLearnButtonState(resourceId, status, resourceName = '') {
     const buttons = document.querySelectorAll('.learn-btn');
     buttons.forEach(btn => {
         const onclickStr = btn.getAttribute('onclick');
@@ -1161,7 +1166,10 @@ function updateLearnButtonState(resourceId, status) {
                 btn.classList.add('learning');
             } else if (status === 'paused') {
                 btn.innerHTML = '<span>▶️</span> 继续学习';
-                btn.onclick = function() { startLearning(resourceId, '', btn); };
+                // 使用闭包捕获当前按钮、资源ID和资源名称，避免闭包陷阱
+                btn.onclick = (function(currentBtn, currentResourceId, currentResourceName) {
+                    return function() { startLearning(currentResourceId, currentResourceName, currentBtn); };
+                })(btn, resourceId, resourceName);
                 btn.classList.remove('learning');
             }
         }
@@ -1171,6 +1179,11 @@ function updateLearnButtonState(resourceId, status) {
 // 开始学习
 async function startLearning(resourceId, resourceTitle, btnElement) {
     try {
+        // 如果正在学习其他资源，先结束它
+        if (currentResourceId && learningTimer !== null && currentResourceId !== resourceId) {
+            await endLearning();
+        }
+        
         const response = await fetch('/api/start-learning', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
@@ -1182,7 +1195,10 @@ async function startLearning(resourceId, resourceTitle, btnElement) {
             currentResourceId = resourceId;
             currentResourceTitle = resourceTitle;
             currentLearnBtn = btnElement;
-            learningDuration = 0;
+            // 使用后端返回的累计学习时长，而不是重置为0
+            learningDuration = data.duration || 0;
+            // 记录本次学习开始时的累计时长，用于计算本次学习增量
+            sessionStartDuration = learningDuration;
             
             // 开始计时
             learningTimer = setInterval(() => {
@@ -1213,20 +1229,23 @@ async function pauseLearning() {
         return;
     }
     
+    // 计算本次学习的增量时长（不是累计时长）
+    const sessionDuration = learningDuration - sessionStartDuration;
+    
     try {
         const response = await fetch('/api/pause-learning', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({
                 resource_id: currentResourceId,
-                duration: learningDuration,
+                duration: sessionDuration,  // 传递增量时长，不是累计时长
                 progress: 50.0
             })
         });
         const data = await response.json();
         
         if (data.success) {
-            alert(`学习已暂停！本次学习时长：${learningDuration}分钟`);
+            alert(`学习已暂停！本次学习时长：${sessionDuration}分钟`);
         } else {
             alert('暂停学习失败: ' + data.message);
         }
@@ -1240,7 +1259,11 @@ async function pauseLearning() {
         // 更新按钮状态为"继续学习"
         if (currentLearnBtn) {
             currentLearnBtn.innerHTML = `<span>▶️</span> 继续学习`;
-            currentLearnBtn.onclick = function() { startLearning(currentResourceId, currentResourceTitle, currentLearnBtn); };
+            // 使用闭包捕获当前的资源ID和资源名称，避免页面切换时变量被清空
+            const resourceId = currentResourceId;
+            const resourceTitle = currentResourceTitle;
+            const learnBtn = currentLearnBtn;
+            currentLearnBtn.onclick = function() { startLearning(resourceId, resourceTitle, learnBtn); };
             currentLearnBtn.classList.remove('learning');
         }
     }
@@ -1252,13 +1275,16 @@ async function endLearning(completed = false) {
         return;
     }
     
+    // 计算本次学习的增量时长（不是累计时长）
+    const sessionDuration = learningDuration - sessionStartDuration;
+    
     try {
         const response = await fetch('/api/end-learning', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({
                 resource_id: currentResourceId,
-                duration: learningDuration,
+                duration: sessionDuration,  // 传递增量时长，不是累计时长
                 completed: completed ? 1 : 0,
                 progress: completed ? 100 : 50
             })
@@ -1266,7 +1292,7 @@ async function endLearning(completed = false) {
         const data = await response.json();
         
         if (data.success) {
-            alert(`学习结束！本次学习时长：${learningDuration}分钟`);
+            alert(`学习结束！本次学习时长：${sessionDuration}分钟`);
         } else {
             alert('结束学习失败: ' + data.message);
         }
@@ -1276,15 +1302,22 @@ async function endLearning(completed = false) {
         // 清除计时器
         clearInterval(learningTimer);
         learningTimer = null;
+        
+        // 在清空之前先捕获资源信息
+        const resourceId = currentResourceId;
+        const resourceTitle = currentResourceTitle;
+        const learnBtn = currentLearnBtn;
+        
+        // 清空状态
         learningDuration = 0;
         currentResourceId = null;
         currentResourceTitle = null;
         
         // 恢复按钮状态为"开始学习"
-        if (currentLearnBtn) {
-            currentLearnBtn.innerHTML = '<span>📖</span> 开始学习';
-            currentLearnBtn.onclick = function() { startLearning(currentResourceId, currentResourceTitle, currentLearnBtn); };
-            currentLearnBtn.classList.remove('learning');
+        if (learnBtn) {
+            learnBtn.innerHTML = '<span>📖</span> 开始学习';
+            learnBtn.onclick = function() { startLearning(resourceId, resourceTitle, learnBtn); };
+            learnBtn.classList.remove('learning');
             currentLearnBtn = null;
         }
         

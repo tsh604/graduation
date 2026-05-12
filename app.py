@@ -1526,11 +1526,11 @@ def logout():
             # 获取当前学习状态
             learning_state = get_current_learning_state(user_id)
             if learning_state and learning_state['resource_id']:
-                # 完成学习记录
+                # 完成学习记录（传入0，因为数据库中已经有正确的累计时长）
                 complete_learning_record(
                     user_id, 
                     learning_state['resource_id'], 
-                    learning_state['duration'], 
+                    0,  # duration - 传入0，避免重复累加
                     0,  # completed
                     learning_state.get('progress', 50.0)
                 )
@@ -1947,21 +1947,41 @@ def api_start_learning():
         data = request.get_json()
         resource_id = data.get('resource_id')
         resource_name = data.get('resource_name')
-        duration = data.get('duration', 0)
         
         if not resource_id:
             return jsonify({'success': False, 'message': '资源ID不能为空'}), 400
         
         user_id = session['user_id']
+        
+        # 在开始新学习之前，先完成所有未完成的学习记录
+        conn = sqlite3.connect('data/learning.db')
+        cursor = conn.cursor()
+        cursor.execute('SELECT id, resource_id, duration FROM learning_records WHERE user_id = ? AND end_time IS NULL', (user_id,))
+        unfinished_records = cursor.fetchall()
+        conn.close()
+        
+        for record in unfinished_records:
+            record_id, unfinished_resource_id, duration = record
+            if unfinished_resource_id != resource_id:
+                complete_learning_record(user_id, unfinished_resource_id, 0)
+        
         success, message = create_learning_record(user_id, resource_id)
         
         if success:
-            # 更新学习状态为学习中（包含资源名称）
-            update_learning_state(user_id, resource_id, 'learning', duration, resource_name)
+            # 获取当前资源的累计学习时长（从所有已完成和未完成的记录中累加）
+            conn = sqlite3.connect('data/learning.db')
+            cursor = conn.cursor()
+            cursor.execute('SELECT COALESCE(SUM(duration), 0) FROM learning_records WHERE user_id = ? AND resource_id = ?', (user_id, resource_id))
+            total_duration = cursor.fetchone()[0]
+            conn.close()
+            
+            # 更新学习状态为学习中（包含资源名称和累计时长）
+            update_learning_state(user_id, resource_id, 'learning', total_duration, resource_name)
         
         return jsonify({
             'success': success,
-            'message': message
+            'message': message,
+            'duration': total_duration if success else 0
         }), 200 if success else 400
     except Exception as e:
         return jsonify({'success': False, 'message': f'开始学习失败: {str(e)}'}), 500
@@ -1985,7 +2005,7 @@ def api_get_learning_state():
 
 @app.route('/api/pause-learning', methods=['POST'])
 def api_pause_learning():
-    """暂停学习资源（更新现有记录，不创建新记录）"""
+    """暂停学习"""
     try:
         if 'user_id' not in session:
             return jsonify({'success': False, 'message': '未登录'}), 401
@@ -2010,8 +2030,16 @@ def api_pause_learning():
         success, message = update_learning_record(user_id, resource_id, duration, 0, progress)
         
         if success:
-            # 更新学习状态为暂停
-            update_learning_state(user_id, resource_id, 'paused', duration)
+            # 获取更新后的累计时长，用于保存学习状态
+            conn = sqlite3.connect('data/learning.db')
+            cursor = conn.cursor()
+            cursor.execute('SELECT duration FROM learning_records WHERE user_id = ? AND resource_id = ? AND end_time IS NULL', (user_id, resource_id))
+            result = cursor.fetchone()
+            total_duration = result[0] if result else duration
+            conn.close()
+            
+            # 更新学习状态为暂停（保存累计时长）
+            update_learning_state(user_id, resource_id, 'paused', total_duration)
         
         return jsonify({
             'success': success,
