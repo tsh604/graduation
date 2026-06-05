@@ -76,6 +76,88 @@ function addMessage(content, sender) {
         // 直接移除所有#符号，确保它们不会显示在页面上
         formattedContent = content.replace(/#+/g, '');
         
+        // 将HTML换行符转换为普通换行符
+        formattedContent = formattedContent.replace(/<br\s*\/?>/gi, '\n');
+        
+        // 处理阶段信息，转换为美观的卡片形式
+        // 使用更精确的正则表达式，支持中英文冒号，只匹配阶段标题和基本信息
+        const stageRegex = /阶段\s*(\d+)\s*[:：]\s*([^(]+?)\s*\(\s*([^)]+?)\s*\)\s*[\n\r]+((?:-\s*(?!推荐资源)[^\n\r]*[\n\r]*?)+?)(?=\n阶段|\n- 推荐资源[:：]|\Z)/gi;
+        formattedContent = formattedContent.replace(stageRegex, function(match, stageNum, topic, level, details) {
+            // 清理topic末尾的空格
+            topic = topic.trim();
+            level = level.trim();
+            
+            // 解析详细信息
+            let learningTime = '';
+            let weeks = '';
+            let description = '';
+            
+            // 从details中提取学习时间（处理重复字段，支持中英文冒号）
+            const timeMatches = details.match(/学习时间[\uff1a:]\s*([^\n\r]+)/g);
+            if (timeMatches && timeMatches.length > 0) {
+                const lastTimeMatch = timeMatches[timeMatches.length - 1].match(/学习时间[\uff1a:]\s*([^\n\r]+)/);
+                if (lastTimeMatch) {
+                    learningTime = lastTimeMatch[1].trim();
+                    if (!learningTime.includes('小时')) {
+                        learningTime += ' 小时';
+                    }
+                }
+            }
+            
+            // 从details中提取预计周数（处理重复字段，优先选择包含"周"的）
+            const weekMatches = details.match(/预计周数[\uff1a:]\s*([^\n\r]+)/g);
+            if (weekMatches) {
+                for (let wm of weekMatches) {
+                    const wmMatch = wm.match(/预计周数[\uff1a:]\s*([^\n\r]+)/);
+                    if (wmMatch) {
+                        const val = wmMatch[1].trim();
+                        if (val.includes('周')) {
+                            weeks = val;
+                            break;
+                        }
+                        if (!weeks) weeks = val;
+                    }
+                }
+                if (weeks && !weeks.includes('周')) {
+                    weeks += ' 周';
+                }
+            }
+            
+            // 从details中提取学习内容（支持中英文冒号）
+            const descMatch = details.match(/学习内容[\uff1a:]\s*([^\n\r]+)/);
+            if (descMatch) {
+                description = descMatch[1].trim();
+            }
+            
+            // 生成阶段卡片HTML
+            return `
+                <div class="stage-card">
+                    <div class="stage-header">
+                        <span class="stage-badge">阶段 ${stageNum}</span>
+                        <span class="stage-topic">${topic}</span>
+                        <span class="stage-level">${level}</span>
+                    </div>
+                    <div class="stage-details">
+                        <div class="stage-detail">
+                            <span class="detail-icon">⏱️</span>
+                            <span class="detail-label">学习时间</span>
+                            <span class="detail-value">${learningTime}</span>
+                        </div>
+                        <div class="stage-detail">
+                            <span class="detail-icon">📅</span>
+                            <span class="detail-label">预计周数</span>
+                            <span class="detail-value">${weeks}</span>
+                        </div>
+                        <div class="stage-detail-full">
+                            <span class="detail-icon">📚</span>
+                            <span class="detail-label">学习内容</span>
+                            <span class="detail-value">${description}</span>
+                        </div>
+                    </div>
+                </div>
+            `;
+        });
+        
         // 处理资源项，转换为美观的卡片形式
         formattedContent = formattedContent.replace(/(\d+)\.\s*[\[【](.*?)[\]】]\s*(.*?)\s*-\s*(https?:\/\/[^\s]+)/g, function(match, index, type, title, url) {
             // 为了确保收藏正确的资源，我们需要获取实际的资源ID
@@ -702,6 +784,46 @@ async function loadHistory() {
                     // 直接移除所有#符号，确保它们不会显示在页面上
                     formattedContent = formattedContent.replace(/#+/g, '');
                     
+                    // 将HTML换行符转换为普通换行符
+                    formattedContent = formattedContent.replace(/<br\s*\/?>/gi, '\n');
+                    
+                    // 处理阶段信息，转换为美观的卡片形式
+                    const stageRegex = /阶段\s*(\d+)\s*[:：]\s*([^(]+?)\s*\(\s*([^)]+?)\s*\)\s*[\n\r]+((?:-\s*(?!推荐资源)[^\n\r]*[\n\r]*?)+?)(?=\n阶段|\n- 推荐资源[:：]|\Z)/gi;
+                    formattedContent = formattedContent.replace(stageRegex, function(match, stageNum, topic, level, details) {
+                        topic = topic.trim();
+                        level = level.trim();
+                        let learningTime = '';
+                        let weeks = '';
+                        let description = '';
+                        
+                        const timeMatches = details.match(/学习时间[\uff1a:]\s*([^\n\r]+)/g);
+                        if (timeMatches && timeMatches.length > 0) {
+                            const lastTimeMatch = timeMatches[timeMatches.length - 1].match(/学习时间[\uff1a:]\s*([^\n\r]+)/);
+                            if (lastTimeMatch) {
+                                learningTime = lastTimeMatch[1].trim();
+                                if (!learningTime.includes('小时')) learningTime += ' 小时';
+                            }
+                        }
+                        
+                        const weekMatches = details.match(/预计周数[\uff1a:]\s*([^\n\r]+)/g);
+                        if (weekMatches) {
+                            for (let wm of weekMatches) {
+                                const wmMatch = wm.match(/预计周数[\uff1a:]\s*([^\n\r]+)/);
+                                if (wmMatch) {
+                                    const val = wmMatch[1].trim();
+                                    if (val.includes('周')) { weeks = val; break; }
+                                    if (!weeks) weeks = val;
+                                }
+                            }
+                            if (weeks && !weeks.includes('周')) weeks += ' 周';
+                        }
+                        
+                        const descMatch = details.match(/学习内容[\uff1a:]\s*([^\n\r]+)/);
+                        if (descMatch) description = descMatch[1].trim();
+                        
+                        return `<div class="stage-card"><div class="stage-header"><span class="stage-badge">阶段 ${stageNum}</span><span class="stage-topic">${topic}</span><span class="stage-level">${level}</span></div><div class="stage-details"><div class="stage-detail"><span class="detail-icon">⏱️</span><span class="detail-label">学习时间</span><span class="detail-value">${learningTime}</span></div><div class="stage-detail"><span class="detail-icon">📅</span><span class="detail-label">预计周数</span><span class="detail-value">${weeks}</span></div><div class="stage-detail-full"><span class="detail-icon">📚</span><span class="detail-label">学习内容</span><span class="detail-value">${description}</span></div></div></div>`;
+                    });
+                    
                     // 处理资源项，转换为美观的卡片形式
                     formattedContent = formattedContent.replace(/(\d+)\.\s*[\[【](.*?)[\]】]\s*(.*?)\s*-\s*(https?:\/\/[^\s]+)/g, function(match, index, type, title, url) {
                         // 为了确保收藏正确的资源，我们需要获取实际的资源ID
@@ -1136,6 +1258,9 @@ async function loadLearningState() {
                 
                 // 更新对应按钮的状态
                 updateLearnButtonState(state.resource_id, 'learning', currentResourceTitle);
+                
+                // 禁用其他学习按钮
+                disableOtherLearnButtons(state.resource_id);
             } else if (state.resource_id && state.status === 'paused') {
                 currentResourceId = state.resource_id;
                 currentResourceTitle = state.resource_name || '未知资源';
@@ -1145,6 +1270,9 @@ async function loadLearningState() {
                 
                 // 更新对应按钮的状态为暂停
                 updateLearnButtonState(state.resource_id, 'paused', currentResourceTitle);
+                
+                // 暂停状态下启用所有学习按钮
+                enableAllLearnButtons();
             }
         }
     } catch (error) {
@@ -1164,6 +1292,7 @@ function updateLearnButtonState(resourceId, status, resourceName = '') {
                 btn.innerHTML = '<span>⏸️</span> 暂停学习';
                 btn.onclick = function() { pauseLearning(); };
                 btn.classList.add('learning');
+                btn.classList.remove('disabled');
             } else if (status === 'paused') {
                 btn.innerHTML = '<span>▶️</span> 继续学习';
                 // 使用闭包捕获当前按钮、资源ID和资源名称，避免闭包陷阱
@@ -1171,6 +1300,50 @@ function updateLearnButtonState(resourceId, status, resourceName = '') {
                     return function() { startLearning(currentResourceId, currentResourceName, currentBtn); };
                 })(btn, resourceId, resourceName);
                 btn.classList.remove('learning');
+                btn.classList.remove('disabled');
+            }
+        }
+    });
+}
+
+// 禁用其他学习按钮
+function disableOtherLearnButtons(activeResourceId) {
+    const buttons = document.querySelectorAll('.learn-btn');
+    buttons.forEach(btn => {
+        const onclickStr = btn.getAttribute('onclick');
+        if (onclickStr) {
+            // 检查是否是当前正在学习的资源按钮
+            const isActiveBtn = onclickStr.includes(`startLearning(${activeResourceId}`);
+            if (!isActiveBtn) {
+                btn.classList.add('disabled');
+                btn.setAttribute('data-tooltip', `请先暂停「${currentResourceTitle}」的学习`);
+                // 移除点击事件
+                btn.onclick = function(e) {
+                    e.preventDefault();
+                    return false;
+                };
+            }
+        }
+    });
+}
+
+// 启用所有学习按钮
+function enableAllLearnButtons() {
+    const buttons = document.querySelectorAll('.learn-btn');
+    buttons.forEach(btn => {
+        btn.classList.remove('disabled');
+        btn.removeAttribute('data-tooltip');
+        // 恢复点击事件（需要重新绑定，这里简单处理）
+        const onclickStr = btn.getAttribute('onclick');
+        if (onclickStr) {
+            // 尝试从onclick字符串中提取资源ID和名称
+            const match = onclickStr.match(/startLearning\((\d+),\s*['"]([^'"]+)['"]/);
+            if (match) {
+                const resourceId = parseInt(match[1]);
+                const resourceTitle = match[2];
+                btn.onclick = (function(id, title, currentBtn) {
+                    return function() { startLearning(id, title, currentBtn); };
+                })(resourceId, resourceTitle, btn);
             }
         }
     });
@@ -1209,6 +1382,9 @@ async function startLearning(resourceId, resourceTitle, btnElement) {
             btnElement.innerHTML = '<span>⏸️</span> 暂停学习';
             btnElement.onclick = function() { pauseLearning(); };
             btnElement.classList.add('learning');
+            
+            // 禁用其他学习按钮
+            disableOtherLearnButtons(resourceId);
             
             alert(`开始学习「${resourceTitle}」！学习时长将被记录。`);
             
@@ -1256,6 +1432,9 @@ async function pauseLearning() {
         clearInterval(learningTimer);
         learningTimer = null;
         
+        // 启用所有学习按钮
+        enableAllLearnButtons();
+        
         // 更新按钮状态为"继续学习"
         if (currentLearnBtn) {
             currentLearnBtn.innerHTML = `<span>▶️</span> 继续学习`;
@@ -1302,6 +1481,9 @@ async function endLearning(completed = false) {
         // 清除计时器
         clearInterval(learningTimer);
         learningTimer = null;
+        
+        // 启用所有学习按钮
+        enableAllLearnButtons();
         
         // 在清空之前先捕获资源信息
         const resourceId = currentResourceId;
